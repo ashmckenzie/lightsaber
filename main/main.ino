@@ -3,9 +3,9 @@
 #include <OneButton.h>
 #include <EEPROMex.h>
 
-//#include <IniFile.h>
+//#include <MPU6050_6Axis_MotionApps20.h>
 
-#define DEBUG          false
+//#include <IniFile.h>
 
 #define SD_SELECT_PIN    4
 #define BUTTON_MAIN_PIN  5
@@ -13,12 +13,23 @@
 #define SPEAKER_PIN      9
 #define LED_PIN          13
 
-#define BUTTON_CLICK_TICKS  300
-#define BUTTON_PRESS_TICKS  600
+#define BUTTON_CLICK_TICKS  200
+#define BUTTON_PRESS_TICKS  700
 
 #define MAX_SOUND_FONT_COUNT 4
 
 #define SOUND_FONTS_BASE "/fonts"
+
+#define OKAY_SOUND_FILE_NAME "/internal/okay.wav"
+//#define BOOT_SOUND_FILE_NAME "/internal/boot.wav"
+#define LOCKUP_SOUND_FILE_NAME "/internal/lockup.wav"
+
+#define NAME_SOUND_FILE_NAME "name.wav"
+#define IDLE_SOUND_FILE_NAME "idle.wav"
+#define POWER_ON_SOUND_FILE_NAME "poweron.wav"
+#define POWER_OFF_SOUND_FILE_NAME "poweroff.wav"
+#define SWING_SOUND_FILE_NAME "swing.wav"
+#define CLASH_SOUND_FILE_NAME "clash.wav"
 
 OneButton buttonMain(BUTTON_MAIN_PIN, true);
 OneButton buttonAux(BUTTON_AUX_PIN, true);
@@ -28,27 +39,52 @@ SdFat sd;
 
 /* -------------------------------------------------------------------------------------------------- */
 
-int addressInt;
-int addressCharArray;
+//MPU6050 mpu;
+//
+//uint8_t mpuIntStatus;
+//uint8_t devStatus;
+//uint16_t packetSize;
+//uint16_t fifoCount;
+//uint8_t fifoBuffer[64];
+//
+//Quaternion q;
+//VectorInt16 aaWorld;
+//
+//static Quaternion ql;
+//static Quaternion qr;
+//static VectorInt16 aaWorld_last;
+//static VectorInt16 aaWorld_reading;
+//
+//unsigned long magnitude = 0;
 
-bool saberOn = false;
-bool playingLockupSound = false;
+//volatile bool mpuInterrupt = false;
+//
+//void dmpDataReady() {
+//  mpuInterrupt = true;
+//}
+
+/* -------------------------------------------------------------------------------------------------- */
+
+unsigned int addressInt;
+unsigned int addressCharArray;
+
+unsigned int saberOn = 0;
+unsigned int soundAvailable = 0;
+unsigned int playingLockupSound = 0;
+
 long availableSoundFontCount = 0;
 long currentSoundFontIndex = 0;
-char currentSoundFontName[24];
-char availableSoundFonts[MAX_SOUND_FONT_COUNT][24];
+char currentSoundFontName[20];
+char availableSoundFonts[MAX_SOUND_FONT_COUNT][20];
 
 /* -------------------------------------------------------------------------------------------------- */
 
 void StreamPrint_progmem(Print &out, PGM_P format, ...) {
   if (Serial.available()) { return; }
-  // program memory version of printf - copy of format string and result share a buffer
-  // so as to avoid too much memory use
   char formatString[128], *ptr;
-  strncpy_P(formatString, format, sizeof(formatString)); // copy in from program mem
-  // null terminate - leave last char since we might need it in worst case for result's \0
+  strncpy_P(formatString, format, sizeof(formatString));
   formatString[sizeof(formatString) - 2] = '\0'; 
-  ptr = &formatString[strlen(formatString) + 1]; // our result buffer...
+  ptr = &formatString[strlen(formatString) + 1];
   va_list args;
   va_start (args, format);
   vsnprintf(ptr, sizeof(formatString) - 1 - strlen(formatString), formatString, args);
@@ -74,40 +110,57 @@ void fireLED(int d) {
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void setupSerial() {
-  Serial.begin(115200);
-}
-
 void setupLED() {
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_PIN, LOW);  
 }
 
-void setupMainSwitch() {
+//void setupAccelerometer() {
+//  Wire.begin();
+//  mpu.initialize();
+//
+//  if (!mpu.testConnection()) {
+////    Serialprint("MPU6050 failed\n");
+//    return;
+//  }
+//
+//  devStatus = mpu.dmpInitialize();
+//
+//  mpu.setXAccelOffset(-762);
+//  mpu.setYAccelOffset(583);
+//  mpu.setZAccelOffset(1254);
+//  
+//  mpu.setXGyroOffset(84);
+//  mpu.setYGyroOffset(-47);
+//  mpu.setZGyroOffset(87);
+//
+//  mpu.setDMPEnabled(true);
+//
+////  attachInterrupt(0, dmpDataReady, RISING);
+//  mpu.getIntStatus();
+//  packetSize = mpu.dmpGetFIFOPacketSize();
+//
+////  Serialprint("MPU6050 ready!\n");
+//}
+
+void setupSwitches() {
   buttonMain.setClickTicks(BUTTON_CLICK_TICKS);
   buttonMain.setPressTicks(BUTTON_PRESS_TICKS);
   buttonMain.attachClick(mainButtonPress);
-  buttonMain.attachLongPressStart(mainButtonLongPress);
-}
-
-void setupAuxSwitch() {
+  buttonMain.attachLongPressStart(turnSaberOff);
+  
   buttonAux.setClickTicks(BUTTON_CLICK_TICKS);
   buttonAux.setPressTicks(BUTTON_PRESS_TICKS);
   buttonAux.attachClick(auxButtonPress);
   buttonAux.attachLongPressStart(auxButtonLongPress);
 }
 
-void setupSwitches() {
-  setupMainSwitch();
-  setupAuxSwitch();
-}
-
 void setupSDCard() { 
   pinMode(SD_SELECT_PIN, OUTPUT);
   digitalWrite(SD_SELECT_PIN, HIGH);
 
-  if (!sd.begin(SD_SELECT_PIN, SPI_FULL_SPEED)) {
-    Serialprint("sd.begin() failed\n");
+  if (!sd.begin(SD_SELECT_PIN)) {
+//    Serialprint("sd.begin() failed\n");
     return;    
   }
 }
@@ -130,65 +183,132 @@ void setupSDCard() {
 
 void setupAudio(unsigned int volume) {
   audio.speakerPin = SPEAKER_PIN;
-  audio.setVolume(volume);
+//  audio.setVolume(volume);
+  soundAvailable = 1;
 }
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void processButtonClicks() {
-  buttonMain.tick();
-  buttonAux.tick();
-}
-
 void mainButtonPress() {
-  Serialprint("MAIN button press!\n");
-  if (!saberOn) {    
-    turnSaberOn();    
-  }
-}
-
-void mainButtonLongPress() {
-  Serialprint("MAIN button long press!\n");
-  turnSaberOff();
+  //  Serialprint("MAIN press!\n");
+  (saberOn) ? playFontSoundWithHum(SWING_SOUND_FILE_NAME) : turnSaberOn();
 }
 
 void auxButtonPress() {
-  Serialprint("AUX button press!\n");
-  if (saberOn) {
-    playLockupSound();
-  } else {
-    changeSoundFont();
-  }
+//  Serialprint("AUX press!\n");
+  (saberOn) ? playFontSoundWithHum(CLASH_SOUND_FILE_NAME) : changeSoundFont();
 }
 
 void auxButtonLongPress() {
-  Serialprint("AUX button long press!\n");
-  if (!saberOn) {
-    enterConfigMode();
+  if (saberOn) {
+    playLockupSound();
   }
 }
 
-void enterConfigMode() {
-  Serialprint("Entering config mode!\n");
+/* -------------------------------------------------------------------------------------------------- */
+
+void waitForSoundToFinish() {
+  if (soundAvailable) { while (audio.isPlaying()) { };
+  }
+}
+
+void currentSoundFontDirectory(char *filename, char *fullFilename) {  
+  sprintf(fullFilename, "/fonts/%s/%s", currentSoundFontName, filename);
+}
+
+void playSound(char *filename, boolean force=false, boolean loopIt=false) {
+  if (force) {
+    if (soundAvailable) { audio.stopPlayback(); }
+  } else {
+    waitForSoundToFinish();
+  }
+
+  Serialprint("Playing '%s' (force: %d, loop: %d)\n", filename, force, loopIt);
+ 
+  if (soundAvailable) {
+    audio.play(filename);
+    audio.loop(loopIt);
+  }
+}
+
+void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
+  char fullFilename[60];
+  
+  currentSoundFontDirectory(filename, fullFilename);
+  playSound(fullFilename, force, loopIt);
+}
+
+void loopSound(char *filename, boolean force=false) {
+  playSound(filename, force, true);
+}
+
+void loopFontSound(char *filename, boolean force=false) {
+  playFontSound(filename, force, true);
+}
+
+
+//void playOKSound() {
+//  playSound(OKAY_SOUND_FILE_NAME);
+//}
+
+//void playBootSound() {
+//  playSound(BOOT_SOUND_FILE_NAME);
+//}
+
+void playSoundFontIdleSound(boolean force=false) {
+  loopFontSound("idle.wav", force);
+}
+
+void playLockupSound() {  
+  if (!playingLockupSound) {
+    playingLockupSound = 1;
+    loopSound(LOCKUP_SOUND_FILE_NAME, true);
+  } else {
+    playingLockupSound = 0;
+    playSoundFontIdleSound(true);
+  }
+}
+
+//void playSoundFontPowerOnSound() {
+//  playFontSoundWithHum(POWER_ON_SOUND_FILE_NAME);
+//}
+
+//void playSoundFontPowerOffSound() {
+//  playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
+//}
+
+//void playSoundFontSwingSound() {
+//  playFontSoundWithHum(SWING_SOUND_FILE_NAME);
+//}
+
+//void playSoundFontClashSound() {
+//  playFontSoundWithHum(CLASH_SOUND_FILE_NAME);
+//}
+
+void playSoundFontNameSound() {
+  playFontSound(NAME_SOUND_FILE_NAME);
+}
+
+void playFontSoundWithHum(char *filename) {
+  playFontSound(filename, true);
+  playSoundFontIdleSound();
 }
 
 /* -------------------------------------------------------------------------------------------------- */
 
 void turnSaberOn() {
   if (!saberOn) {
-    Serialprint("Powering ON..\n");
-    playSoundFontPowerOnSound();
+    playFontSoundWithHum(POWER_ON_SOUND_FILE_NAME);
     setLED(HIGH);
-    saberOn = true;
+    saberOn = 1;
   }
 }
 
 void turnSaberOff() {
   if (saberOn) {    
-    Serialprint("Powering OFF..\n");
-    playSoundFontPowerOffSound();
+    playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
     setLED(LOW);
-    saberOn = false;
+    saberOn = 0;
   }
 }
 
@@ -209,15 +329,15 @@ void selectSoundFont(long index) {
   currentSoundFontIndex = index;
   sprintf(currentSoundFontName, availableSoundFonts[currentSoundFontIndex]);
 
-  Serialprint("Selecting font '%s'\n", currentSoundFontName);
-  
+  Serialprint("Selecting font '%s'\n", currentSoundFontName);  
   EEPROM.writeInt(addressInt, index);
-  EEPROM.writeBlock<char>(addressCharArray, currentSoundFontName, 24); 
+  EEPROM.writeBlock<char>(addressCharArray, currentSoundFontName, 20); 
 }
 
 void getCurrentSoundFont(char *fontName) {
-  EEPROM.readBlock<char>(addressCharArray, fontName, 24);
+  EEPROM.readBlock<char>(addressCharArray, fontName, 20);
   sprintf(currentSoundFontName, fontName);
+  fontName = "classic";
 }
 
 long getCurrentSoundFontIndex() {
@@ -231,7 +351,7 @@ long getCurrentSoundFontIndex() {
 
 void setFirstSoundFontIfNotSet() {
   long soundFontIndex;
-  char soundFontName[24];
+  char soundFontName[20];
   char *soundFonts[MAX_SOUND_FONT_COUNT];
 
   soundFontIndex = getCurrentSoundFontIndex();
@@ -244,103 +364,17 @@ void setFirstSoundFontIfNotSet() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void waitForSoundToFinish() {
-  while (audio.isPlaying()) { };
-}
-
-void playSound(char *filename, boolean force=false, boolean loopIt=false) {
-  if (force) {
-    audio.stopPlayback();
-  } else {
-    waitForSoundToFinish();
-  }
-
-  Serialprint("Playing '%s' (force: %d, loop: %d)\n", filename, force, loopIt);
- 
-  audio.play(filename);
-  audio.loop(loopIt);
-}
-
-void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
-  char fullFilename[60];
-  
-  currentSoundFontDirectory(filename, fullFilename);
-  playSound(fullFilename, force, loopIt);
-}
-
-void loopSound(char *filename, boolean force=false) {
-  playSound(filename, force, true);
-}
-
-void loopFontSound(char *filename, boolean force=false) {
-  playFontSound(filename, force, true);
-}
-
-void currentSoundFontDirectory(char *filename, char *fullFilename) {  
-  sprintf(fullFilename, "/fonts/%s/%s", currentSoundFontName, filename);
-}
-
-void playOKSound() {
-  playSound("/internal/okay.wav");
-}
-
-void playBootSound() {
-  playSound("/internal/boot.wav");
-}
-
-void playSoundFontIdleSound(boolean force=false) {
-  loopFontSound("idle.wav", force);
-}
-
-void playLockupSound() {  
-  if (!playingLockupSound) {
-    playingLockupSound = true;
-    loopSound("/internal/lockup.wav", true);
-  } else {
-    playingLockupSound = false;
-    playSoundFontIdleSound(true);
-  }
-}
-
-void playSoundFontPowerOnSound() {
-  playFontSoundWithHum("poweron.wav");
-}
-
-void playSoundFontPowerOffSound() {
-  audio.stopPlayback();
-  playFontSound("poweroff.wav", true);
-}
-
-void playSoundFontSwingSound() {
-  playFontSoundWithHum("swing.wav");
-}
-
-void playSoundFontClashSound() {
-  playFontSoundWithHum("clash.wav");
-}
-
-void playSoundFontNameSound() {
-  playFontSound("name.wav");
-}
-
-void playFontSoundWithHum(char *filename) {
-  playFontSound(filename, true);
-  playSoundFontIdleSound();
-}
-
-/* -------------------------------------------------------------------------------------------------- */
-
 unsigned int soundVolume() {
-  unsigned int currentVolume = 4;
+  int currentVolume = 4;
   
   return currentVolume;
 }
 
-bool readConfig(char *section, char *key) { 
-  char buf[20];
-
-  return false;
-  
+//bool readConfig(char *section, char *key) { 
+//  char buf[20];
+//
+//  return false;
+//  
 //  if (configFile.getValue(section, key, buf, 20)) {
 //    Serial.println(buf);
 //    return true;
@@ -348,21 +382,21 @@ bool readConfig(char *section, char *key) {
 //    Serialprint("%s\n", "Could not read value");
 //    return false;
 //  }
-}
+//}
 
 void discoverSoundFonts() {
   FatFile root;
   FatFile file;
   unsigned int counter = 0;
-  char buffer[24];
+  char buffer[20];
 
   waitForSoundToFinish();
 
   root.open(SOUND_FONTS_BASE);
 
   while (file.openNext(&root, O_READ)) {
-    file.getName(buffer, 24);
-    Serialprint("Found sound font %d: '%s'\n", counter, buffer);
+    file.getName(buffer, 20);
+//    Serialprint("Found sound font %d: '%s'\n", counter, buffer);
     strncpy(availableSoundFonts[counter++], buffer, strlen(buffer));
     file.close();    
   }
@@ -374,29 +408,91 @@ void discoverSoundFonts() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
+//void processMovement() {
+//  long multiplier = 100000;
+//  VectorInt16 aa;
+//  VectorInt16 aaReal;
+//
+//  VectorFloat gravity;
+//  
+//  while (!mpuInterrupt && fifoCount < packetSize) { }
+//
+//  mpuInterrupt = false;
+//  mpuIntStatus = mpu.getIntStatus();
+//
+//  fifoCount = mpu.getFIFOCount();
+//
+//  if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
+//    mpu.resetFIFO();
+//
+//  } else if (mpuIntStatus & 0x02) {
+//    while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
+//  
+//    mpu.getFIFOBytes(fifoBuffer, packetSize);
+//    fifoCount -= packetSize;
+//
+//    ql = qr;
+//    aaWorld_last = aaWorld_reading;
+//
+//    mpu.dmpGetQuaternion(&qr, fifoBuffer);
+//    mpu.dmpGetGravity(&gravity, &qr);
+//    mpu.dmpGetAccel(&aa, fifoBuffer);
+//    mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+//    mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &qr);    
+//
+//    q.w = qr.w * multiplier - ql.w * multiplier;
+//    q.x = qr.x * multiplier - ql.x * multiplier;
+//    q.y = qr.y * multiplier - ql.y * multiplier;
+//    q.z = qr.z * multiplier - ql.z * multiplier;
+//
+//    magnitude = 1000 * sqrt(sq(aaWorld.x / 1000) + sq(aaWorld.y / 1000) + sq(aaWorld.z / 1000));
+//  }
+//}
+//
+//void checkForMovement() {
+//  unsigned int val = 1200;
+//
+////  Serialprint("%d %d %d %d\n", (abs(q.w) > val), (aaWorld.z < 0), (abs(q.z) < (9 / 2) * val), ((abs(q.x) > (3 * val)) or (abs(q.y) > (3 * val))));
+//   
+//  if (
+//      abs(q.w) > val
+//      && aaWorld.x < 0 
+//      && abs(q.x) < (9 / 2) * val 
+//      && ((abs(q.z) > (3 * val)) || (abs(q.y) > (3 * val)))
+//     )
+//  {
+//    //Serialprint("Movement!\n");
+//    playFontSoundWithHum(SWING_SOUND_FILE_NAME);
+//  }
+//}
+
+/* -------------------------------------------------------------------------------------------------- */
+
 void setup() {
-  setupSerial();
+  Serial.begin(38400);
   
   addressInt = EEPROM.getAddress(sizeof(int));
-  addressCharArray = EEPROM.getAddress(sizeof(char) * 24); 
+  addressCharArray = EEPROM.getAddress(sizeof(char) * 20); 
 
   setupLED();
   setupSwitches();
   setupSDCard();
 //  setupConfigFile();
   setupAudio(soundVolume());
-
+//  setupAccelerometer();
+  
   discoverSoundFonts();
   setFirstSoundFontIfNotSet();
   
-//  playBootSound();
   playSoundFontNameSound();
 }
 
-void loop() {
-  processButtonClicks();
+void loop() {  
+  buttonMain.tick();
+  buttonAux.tick();
   
-  if (saberOn) {
-    // process movements
-  }
+//  if (saberOn) {
+//    processMovement();
+//    checkForMovement();
+//  }
 }

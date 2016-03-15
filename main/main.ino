@@ -8,6 +8,7 @@
 
 #define DEBUG
 //#define DEBUG_MORE
+//#define DEBUG_WIP
 
 #define SD_SELECT_PIN    4
 #define BUTTON_MAIN_PIN  5
@@ -70,13 +71,15 @@ SdFat sd;
 
 int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LENGTH);
 
+boolean playSounds = false;
+
 boolean saberOn = false;
 boolean soundAvailable = false;
 boolean playingLockupSound = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void setLED(byte value) {
+void setLED(unsigned int value) {
   digitalWrite(LED_PIN, value);
 }
 
@@ -185,7 +188,7 @@ void mainButtonPress() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("mainButtonPress(): press!"));
 #endif
-  fireLED(300);
+//  fireLED(300);
   (saberOn) ? playSoundFontSwingSound() : turnSaberOn();
 }
 
@@ -200,7 +203,7 @@ void auxButtonPress() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("auxButtonPress(): press!"));
 #endif
-  fireLED(300);
+//  fireLED(300);
   (saberOn) ? playSoundFontClashSound() : selectNextSoundFont();
 }
 
@@ -226,6 +229,11 @@ void getCurrentSoundFontDirectory(char *filename, char *fullFilename) {
 
 void playSound(char *filename, boolean force=false, boolean loopIt=false) {
   char str[100];
+
+#ifdef DEBUG || DEBUG_MORE
+  sprintf(str, "playSound(): Playing '%s' (playSounds: %d, force: %d, loop: %d)", filename, playSounds, force, loopIt);
+  Serial.println(str);
+#endif
   
   if (force) {
     if (soundAvailable) { audio.stopPlayback(); }
@@ -233,12 +241,7 @@ void playSound(char *filename, boolean force=false, boolean loopIt=false) {
     waitForSoundToFinish();
   }
 
-#ifdef DEBUG || DEBUG_MORE
-  sprintf(str, "playSound(): Playing '%s' (force: %d, loop: %d)", filename, force, loopIt);
-  Serial.println(str);
-#endif
-
-  if (soundAvailable) {
+  if (playSounds && soundAvailable) {
     audio.play(filename);
     audio.loop(loopIt);
   }
@@ -332,17 +335,30 @@ void turnSaberOff() {
 
 void selectNextSoundFont() {
   if (!saberOn) {
+#ifdef DEBUG_MORE
+  Serial.println(F("selectNextSoundFont(): HERE"));
+#endif        
     selectNextSoundFontName();
     playSoundFontNameSound();
   }
 }
 
 void selectNextSoundFontName() {
-  char nextSoundFontName[MAX_SOUND_FONT_FOLDER_LENGTH];
+  char name[MAX_SOUND_FONT_FOLDER_LENGTH];
   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
 
-  getNextSoundFontName(nextSoundFontName);
-  storeSelectedSoundFontName(nextSoundFontName);
+#ifdef DEBUG_MORE
+  Serial.println(F("selectNextSoundFontName(): HERE"));
+#endif
+
+  getNextSoundFontName(name);
+
+#ifdef DEBUG || DEBUG_MORE
+  Serial.print(F("selectNextSoundFontName(): name: "));
+  Serial.println(name);
+#endif
+  
+  storeSelectedSoundFontName(name);
 }
 
 void getNextSoundFontName(char *name) {
@@ -476,7 +492,7 @@ void getStoredSoundFontName(char *name) {
 }
 
 void storeSelectedSoundFontName(char *name) {
-#ifdef DEBUG_MORE
+#ifdef DEBUG || DEBUG_MORE
   Serial.print(F("storeSelectedSoundFontName(): Storing font: "));
   Serial.println(name);
 #endif

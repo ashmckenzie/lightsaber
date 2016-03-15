@@ -56,7 +56,7 @@ SdFat sd;
 //static VectorInt16 aaWorld_reading;
 //
 //unsigned long magnitude = 0;
-
+//
 //volatile bool mpuInterrupt = false;
 //
 //void dmpDataReady() {
@@ -65,40 +65,11 @@ SdFat sd;
 
 /* -------------------------------------------------------------------------------------------------- */
 
-unsigned int addressCharArray;
+int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LENGTH);
 
-boolean saberOn;
-boolean soundAvailable;
-boolean playingLockupSound;
-
-/* -------------------------------------------------------------------------------------------------- */
-
-void initialize() {
-  saberOn = false;
-  soundAvailable = false;
-  playingLockupSound = false;
-
-  addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LENGTH);
-}
-
-/* -------------------------------------------------------------------------------------------------- */
-
-void StreamPrint_progmem(Print &out, PGM_P format, ...) {
-  if (Serial.available()) { return; }
-  char formatString[128], *ptr;
-  strncpy_P(formatString, format, sizeof(formatString));
-  formatString[sizeof(formatString) - 2] = '\0';
-  ptr = &formatString[strlen(formatString) + 1];
-  va_list args;
-  va_start (args, format);
-  vsnprintf(ptr, sizeof(formatString) - 1 - strlen(formatString), formatString, args);
-  va_end (args);
-  formatString[sizeof(formatString) - 1] = '\0';
-  out.print(ptr);
-}
-
-#define Serialprint(format, ...) StreamPrint_progmem(Serial, PSTR(format), ##__VA_ARGS__)
-#define Streamprint(stream,format, ...) StreamPrint_progmem(stream, PSTR(format), ##__VA_ARGS__)
+boolean saberOn = false;
+boolean soundAvailable = false;
+boolean playingLockupSound = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -128,7 +99,7 @@ void setupLED() {
 //  mpu.initialize();
 //
 //  if (!mpu.testConnection()) {
-////    Serialprint("MPU6050 failed\n");
+////    Serial.println(F("setupAccelerometer(): MPU6050 failed"));
 //    return;
 //  }
 //
@@ -148,7 +119,7 @@ void setupLED() {
 //  mpu.getIntStatus();
 //  packetSize = mpu.dmpGetFIFOPacketSize();
 //
-////  Serialprint("MPU6050 ready!\n");
+////  Serial.println(F("setupAccelerometer(): MPU6050 ready!"));
 //}
 
 void setupSwitches() {
@@ -168,7 +139,7 @@ void setupSDCard() {
   digitalWrite(SD_SELECT_PIN, HIGH);
 
   if (!sd.begin(SD_SELECT_PIN)) {
-//    Serialprint("sd.begin() failed\n");
+    Serial.println(F("setupSDCard(): sd.begin() failed"));
     return;
   }
 }
@@ -179,31 +150,31 @@ void setupSDCard() {
 //  IniFile configFile("/config.ini");
 //
 //  if (! configFile.open(sd)) {
-//    Serialprint("INI file does not exist\n");
+//    Serial.println(F("setupConfigFile(): INI file does not exist"));
 //    return;
 //  }
 //
 //  if (!configFile.validate(buffer, bufferLen)) {
-//    Serialprint("INI file is invalid\n");
+//    Serial.println(F("setupConfigFile(): INI file is invalid"));
 //    return;
 //  }
 //}
 
-void setupAudio(unsigned int volume) {
+void setupAudio() {
   audio.speakerPin = SPEAKER_PIN;
-//  audio.setVolume(volume);
+//  audio.setVolume(soundVolume());
   soundAvailable = true;
 }
 
 /* -------------------------------------------------------------------------------------------------- */
 
 void mainButtonPress() {
-  //  Serialprint("MAIN press!\n");
+  Serial.println(F("mainButtonPress(): press!"));
   (saberOn) ? playSoundFontSwingSound() : turnSaberOn();
 }
 
 void auxButtonPress() {
-//  Serialprint("AUX press!\n");
+  Serial.println(F("auxButtonPress(): press!"));
   (saberOn) ? playSoundFontClashSound() : selectNextSoundFont();
 }
 
@@ -216,8 +187,7 @@ void auxButtonLongPress() {
 /* -------------------------------------------------------------------------------------------------- */
 
 void waitForSoundToFinish() {
-  if (soundAvailable) { while (audio.isPlaying()) { };
-  }
+  if (soundAvailable) { while (audio.isPlaying()) { }; }
 }
 
 void getCurrentSoundFontDirectory(char *filename, char *fullFilename) {
@@ -228,13 +198,16 @@ void getCurrentSoundFontDirectory(char *filename, char *fullFilename) {
 }
 
 void playSound(char *filename, boolean force=false, boolean loopIt=false) {
+  char str[100];
+  
   if (force) {
     if (soundAvailable) { audio.stopPlayback(); }
   } else {
     waitForSoundToFinish();
   }
 
-  Serialprint("Playing '%s' (force: %d, loop: %d)\n", filename, force, loopIt);
+  sprintf(str, "playSound(): Playing '%s' (force: %d, loop: %d)", filename, force, loopIt);
+  Serial.println(str);
 
   if (soundAvailable) {
     audio.play(filename);
@@ -337,95 +310,111 @@ void selectNextSoundFontName() {
   storeSelectedSoundFontName(nextSoundFontName);
 }
 
-void getNextSoundFontName(nextSoundFontName) {
+void getNextSoundFontName(char *name) {
   byte index;
   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
 
-  index getNextIndexForAvailableSoundFontNames
-  getavailableSoundFontNames(availableSoundFontNames);
-
-  sprintf(nextSoundFontName,
-}
-
-byte getNextIndexForAvailableSoundFontNames(char name) {
-  byte currentIndex;
-
-  if (getIndexForSoundFontName(currentIndex, name)) {
-    return currentIndex++;
-  } else
-    return 0;
+  if (getIndexForSoundFontName(index, name)) {
+    if (index < (MAX_SOUND_FONT_COUNT - 1)) {
+      index = index + 1;
+      Serial.print(F("getNextSoundFontName(): index: "));
+      Serial.println(index);
+    } else {
+      Serial.println(F("getNextSoundFontName(): index: 0 (forced)"));
+      index = 0;
+    }
+  } else {
+    Serial.println(F("getNextSoundFontName(): index: 0 (returned false)"));
+    index = 0;
   }
+  
+  getAvailableSoundFontNames(availableSoundFontNames);
+
+  sprintf(name, availableSoundFontNames[index]);
 }
 
-boolean getIndexForSoundFontName(byte index, char name) {
-  char storedSoundFontName[MAX_SOUND_FONT_FOLDER_LENGTH];
+boolean getIndexForSoundFontName(byte index, char *name) {
+  char storedSoundFontName[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
 
   getStoredSoundFontName(storedSoundFontName);
-  getavailableSoundFontNames(availableSoundFontNames);
+  getAvailableSoundFontNames(availableSoundFontNames);
 
-  if (!storedSoundFontName) { return false; }
+  Serial.print(F("getIndexForSoundFontName(): storedSoundFontName: "));
+  Serial.println(storedSoundFontName);
 
-  for (byte i=0 ; i<sizeof(availableSoundFontNames) ; i++) {
-    if (availableSoundFontNames[i] == storedSoundFontName) {
+  if (!storedSoundFontName) {
+    Serial.println(F("getIndexForSoundFontName(): !storedSoundFontName - return false"));
+    return false;
+  }
+
+  for (byte i = 0 ; i < MAX_SOUND_FONT_COUNT ; i++) {
+    Serial.print(F("getIndexForSoundFontName(): availableSoundFontNames["));
+    Serial.print(i);
+    Serial.print(F("]: "));
+    Serial.println(availableSoundFontNames[i]);
+    
+    if (strcmp(availableSoundFontNames[i], storedSoundFontName) == 0) {
       index = i;
+      Serial.print(F("getIndexForSoundFontName(): index: "));
+      Serial.print(i);
+      Serial.println(F(", return true"));
       return true;
     }
   }
 
+  Serial.println(F("getIndexForSoundFontName(): return false"));
   return false;
 }
 
-void getCurrentSoundFontName(char *currentSoundFontName) {
-  char soundFontName[MAX_SOUND_FONT_FOLDER_LENGTH];
+void getCurrentSoundFontName(char *soundFontName) {
   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
 
   getStoredSoundFontName(soundFontName);
-  getavailableSoundFontNames(availableSoundFontNames);
+  getAvailableSoundFontNames(availableSoundFontNames);
 
-  if (!soundFontName || !isValidSoundFontName(soundFontName)) {
-  } else {
+  if (strlen(soundFontName) == 0) { // || !isValidSoundFontName(soundFontName)) {
+    Serial.println(F("getCurrentSoundFontName(): strlen(soundFontName) == 0"));
+    getNextSoundFontName(soundFontName);
+    storeSelectedSoundFontName(soundFontName);
   }
 
-  sprintf(currentSoundFontName, soundFontName);
+  Serial.print(F("getCurrentSoundFontName(): soundFontName: "));
+  Serial.println(soundFontName);
 }
 
-// void selectFirstSoundFontIfNotSet() {
-//   char soundFontName[MAX_SOUND_FONT_FOLDER_LENGTH];
-//   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
-//
-//   getStoredSoundFontName(soundFontName);
-//   getavailableSoundFontNames(availableSoundFontNames);
-//
-//   if (!soundFontName || !isValidSoundFontName(soundFontName)) {
-//     sprintf(soundFontName, soundFont
-//   }
-//
-//   selectSoundFont(soundFonts[0]);
-// }
+void getStoredSoundFontName(char *name) {
+  char str[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-void getStoredSoundFontName(char *fontName) {
-  EEPROM.readBlock<char>(addressCharArray, fontName, MAX_SOUND_FONT_FOLDER_LENGTH);
+  EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
+
+  Serial.print(F("getStoredSoundFontName(): str: "));
+  Serial.println(str);
+  
+  sprintf(name, str);
 }
 
-void storeSelectedSoundFontName(char name) {
-  Serialprint("Selecting font '%s'\n", name);
+void storeSelectedSoundFontName(char *name) {
+  Serial.print(F("storeSelectedSoundFontName(): Storing font: "));
+  Serial.println(name);
+  
   EEPROM.writeBlock<char>(addressCharArray, name, MAX_SOUND_FONT_FOLDER_LENGTH);
 }
 
-void getavailableSoundFontNames(char *soundFonts) {
+void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH]) {
   FatFile root;
   FatFile file;
   byte counter = 0;
-  char buffer[MAX_SOUND_FONT_FOLDER_LENGTH];
+  char buffer[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
   waitForSoundToFinish();
   root.open(SOUND_FONTS_BASE);
 
   while (file.openNext(&root, O_READ)) {
     file.getName(buffer, MAX_SOUND_FONT_FOLDER_LENGTH);
-    Serialprint("Sound font %d: '%s'\n", counter, buffer);
-    strncpy(soundFonts[counter++], buffer, strlen(buffer));
+//    Serial.print(F("getAvailableSoundFontNames(): "));
+//    Serial.println(buffer);
+    sprintf(soundFonts[counter++], buffer);
     file.close();
   }
 
@@ -447,10 +436,11 @@ unsigned int soundVolume() {
 //  return false;
 //
 //  if (configFile.getValue(section, key, buf, MAX_SOUND_FONT_FOLDER_LENGTH)) {
+//    Serial.print(F("readConfig(): "));
 //    Serial.println(buf);
 //    return true;
 //  } else {
-//    Serialprint("%s\n", "Could not read value");
+//    Serial.print(F("readConfig(): Could not read value"));
 //    return false;
 //  }
 //}
@@ -499,9 +489,11 @@ unsigned int soundVolume() {
 //}
 //
 //void checkForMovement() {
+//  char str[24];
 //  unsigned int val = 1200;
 //
-////  Serialprint("%d %d %d %d\n", (abs(q.w) > val), (aaWorld.z < 0), (abs(q.z) < (9 / 2) * val), ((abs(q.x) > (3 * val)) or (abs(q.y) > (3 * val))));
+//  sprint(str, "%d %d %d %d", (abs(q.w) > val), (aaWorld.z < 0), (abs(q.z) < (9 / 2) * val), ((abs(q.x) > (3 * val)) or (abs(q.y) > (3 * val))));
+//  Serial.println(str);
 //
 //  if (
 //      abs(q.w) > val
@@ -510,7 +502,7 @@ unsigned int soundVolume() {
 //      && ((abs(q.z) > (3 * val)) || (abs(q.y) > (3 * val)))
 //     )
 //  {
-//    //Serialprint("Movement!\n");
+//    //Serial.println(F("checkForMovement(): Movement!"));
 //    playSoundFontSwingSound();
 //  }
 //}
@@ -518,18 +510,17 @@ unsigned int soundVolume() {
 /* -------------------------------------------------------------------------------------------------- */
 
 void setup() {
-  initialize()
-
   setupSerial();
+  Serial.println(F("setup(): Starting.."));
   setupLED();
   setupSwitches();
   setupSDCard();
 //  setupConfigFile();
 //  setupAccelerometer();
-  setupAudio(soundVolume());
-  selectFirstSoundFontIfNotSet();
+  setupAudio();
 
   playSoundFontNameSound();
+  Serial.println(F("setup(): Ready!"));
 }
 
 void loop() {

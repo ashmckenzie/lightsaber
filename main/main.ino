@@ -79,11 +79,11 @@ boolean playingLockupSound = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void setLED(unsigned int value) {
+void setLED(int value) {
   digitalWrite(LED_PIN, value);
 }
 
-void fireLED(byte delayLength) {
+void fireLED(int delayLength) {
   digitalWrite(LED_PIN, HIGH);
   delay(delayLength);
   digitalWrite(LED_PIN, LOW);
@@ -185,7 +185,7 @@ void setupAudio() {
 /* -------------------------------------------------------------------------------------------------- */
 
 void mainButtonPress() {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("mainButtonPress(): press!"));
 #endif
 //  fireLED(300);
@@ -193,14 +193,14 @@ void mainButtonPress() {
 }
 
 void mainButtonLongPress() {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("mainButtonLongPress(): press!"));
 #endif
   if (saberOn) { turnSaberOff(); }
 }
 
 void auxButtonPress() {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("auxButtonPress(): press!"));
 #endif
 //  fireLED(300);
@@ -208,7 +208,7 @@ void auxButtonPress() {
 }
 
 void auxButtonLongPress() {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("auxButtonLongPress(): press!"));
 #endif
   if (saberOn) { playLockupSound(); }
@@ -353,7 +353,7 @@ void selectNextSoundFontName() {
 
   getNextSoundFontName(name);
 
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.print(F("selectNextSoundFontName(): name: "));
   Serial.println(name);
 #endif
@@ -492,7 +492,7 @@ void getStoredSoundFontName(char *name) {
 }
 
 void storeSelectedSoundFontName(char *name) {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.print(F("storeSelectedSoundFontName(): Storing font: "));
   Serial.println(name);
 #endif
@@ -621,7 +621,7 @@ unsigned int soundVolume() {
 void setup() {
   setupSerial();
   
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("setup(): Starting.."));
 #endif
   
@@ -634,7 +634,7 @@ void setup() {
 
   playSoundFontNameSound();
 
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG_MORE
   Serial.println(F("setup(): Ready!"));
 #endif
 }

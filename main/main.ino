@@ -2,19 +2,22 @@
 #include <TMRpcm.h>
 #include <OneButton.h>
 #include <EEPROMex.h>
+#include <Timer.h>
 
 //#include <MPU6050_6Axis_MotionApps20.h>
 //#include <IniFile.h>
 
 //#define DEBUG
 //#define DEBUG_MORE
-//#define DEBUG_WIP
+#define DEBUG_WIP
 
-#define SD_SELECT_PIN    4
-#define BUTTON_MAIN_PIN  5
-#define BUTTON_AUX_PIN   6
-#define SPEAKER_PIN      9
-#define LED_PIN          13
+#define SD_SELECT_PIN       4
+#define BUTTON_MAIN_PIN     5
+#define BUTTON_MAIN_LED_PIN 7
+#define BUTTON_AUX_PIN      6
+#define BUTTON_AUX_LED_PIN  8
+#define SPEAKER_PIN         9
+#define LED_PIN            13
 
 #define BUTTON_CLICK_TICKS  200
 #define BUTTON_PRESS_TICKS  700
@@ -40,6 +43,7 @@ OneButton buttonAux(BUTTON_AUX_PIN, true);
 
 TMRpcm audio;
 SdFat sd;
+Timer t;
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -71,6 +75,9 @@ SdFat sd;
 
 int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LENGTH);
 
+byte buttonMainLEDEvent = 0;
+byte buttonAuxLEDEvent = 0;
+
 boolean playSounds = true;
 
 boolean saberOn = false;
@@ -79,15 +86,15 @@ boolean playingLockupSound = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void setLED(int value) {
-  digitalWrite(LED_PIN, value);
-}
-
-void fireLED(int delayLength) {
-  digitalWrite(LED_PIN, HIGH);
-  delay(delayLength);
-  digitalWrite(LED_PIN, LOW);
-}
+//void setLED(int value) {
+//  digitalWrite(LED_PIN, value);
+//}
+//
+//void fireLED(int delayLength) {
+//  digitalWrite(LED_PIN, HIGH);
+//  delay(delayLength);
+//  digitalWrite(LED_PIN, LOW);
+//}
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -133,10 +140,18 @@ void setupLED() {
 //}
 
 void setupSwitches() {
+  pinMode(BUTTON_MAIN_LED_PIN, OUTPUT);
+//  digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
+  turnOffButtonMainLED();
+  
   buttonMain.setClickTicks(BUTTON_CLICK_TICKS);
   buttonMain.setPressTicks(BUTTON_PRESS_TICKS);
   buttonMain.attachClick(mainButtonPress);
   buttonMain.attachLongPressStart(mainButtonLongPress);
+
+  pinMode(BUTTON_AUX_LED_PIN, OUTPUT);
+//  digitalWrite(BUTTON_AUX_LED_PIN, LOW);
+  turnOffButtonAuxLED();
 
   buttonAux.setClickTicks(BUTTON_CLICK_TICKS);
   buttonAux.setPressTicks(BUTTON_PRESS_TICKS);
@@ -189,8 +204,12 @@ void mainButtonPress() {
   Serial.print(F("mainButtonPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
-//  fireLED(300);
-  (saberOn) ? playSoundFontSwingSound() : turnSaberOn();
+  if (saberOn) {
+    turnOnButtonAuxLED(); 
+    playSoundFontSwingSound();
+  } else {
+    turnSaberOn();
+  }
 }
 
 void mainButtonLongPress() {
@@ -206,8 +225,12 @@ void auxButtonPress() {
   Serial.print(F("auxButtonPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
-//  fireLED(300);
-  (saberOn) ? playSoundFontClashSound() : selectNextSoundFont();
+  if (saberOn) { 
+    turnOnButtonAuxLED();
+    playSoundFontClashSound();
+  } else {
+    selectNextSoundFont();
+  }
 }
 
 void auxButtonLongPress() {
@@ -216,6 +239,62 @@ void auxButtonLongPress() {
   Serial.println(saberOn);
 #endif
   if (saberOn) { playLockupSound(); }
+}
+
+/* -------------------------------------------------------------------------------------------------- */
+
+void turnOnButtonMainLED() {
+  stopOscillateButtonMainLED();
+  digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
+}
+
+void turnOffButtonMainLED() {
+  stopOscillateButtonMainLED();
+  digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
+}
+
+void startOscillateButtonMainLED(unsigned int speed=750) {
+  stopOscillateButtonMainLED();
+  delay(10);
+  buttonMainLEDEvent = t.oscillate(BUTTON_MAIN_LED_PIN, speed, HIGH);  
+}
+
+void stopOscillateButtonMainLED() {
+#ifdef DEBUG_WIP
+  Serial.print(F("stopOscillateButtonMainLED(): buttonMainLEDEvent: "));
+  Serial.println(buttonMainLEDEvent);
+#endif
+  if (buttonMainLEDEvent > 0) {
+    t.stop(buttonMainLEDEvent);
+    buttonMainLEDEvent = 0;
+  }
+}
+
+void turnOnButtonAuxLED() {
+  stopOscillateButtonAuxLED();
+  digitalWrite(BUTTON_AUX_LED_PIN, HIGH);
+}
+
+void turnOffButtonAuxLED() {
+  stopOscillateButtonAuxLED();
+  digitalWrite(BUTTON_AUX_LED_PIN, LOW);
+}
+
+void startOscillateButtonAuxLED(unsigned int speed=750) {
+  stopOscillateButtonAuxLED();
+  delay(10);
+  buttonAuxLEDEvent = t.oscillate(BUTTON_AUX_LED_PIN, speed, HIGH);  
+}
+
+void stopOscillateButtonAuxLED() {
+#ifdef DEBUG_WIP
+  Serial.print(F("stopOscillateButtonAuxLED(): buttonAuxLEDEvent: "));
+  Serial.println(buttonAuxLEDEvent);
+#endif
+  if (buttonAuxLEDEvent > 0) {
+    t.stop(buttonAuxLEDEvent);
+    buttonAuxLEDEvent = 0;
+  }
 }
 
 /* -------------------------------------------------------------------------------------------------- */
@@ -306,9 +385,11 @@ void playSoundFontIdleSound(boolean force=false) {
 void playLockupSound() {
   if (!playingLockupSound) {
     playingLockupSound = true;
+    startOscillateButtonAuxLED(100);
     loopSound(LOCKUP_SOUND_FILE_NAME, true);
   } else {
-    playingLockupSound = false;
+    playingLockupSound = false;    
+    turnOnButtonAuxLED();
     playSoundFontIdleSound(true);
   }
 }
@@ -344,9 +425,11 @@ void turnSaberOn() {
   if (!saberOn) {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
-#endif    
+#endif
+    turnOnButtonMainLED();
+    turnOnButtonAuxLED();
+    
     playSoundFontPowerOnSound();
-//    setLED(HIGH);
     saberOn = true;
   }
 }
@@ -357,7 +440,10 @@ void turnSaberOff() {
   Serial.println(F("turnSaberOff(): Turning saber OFF!"));
 #endif        
     playSoundFontPowerOffSound();
-//    setLED(LOW);
+
+    startOscillateButtonMainLED();
+    startOscillateButtonAuxLED();
+    
     saberOn = false;
   }
 }
@@ -656,6 +742,11 @@ unsigned int soundVolume() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
+void processButtonPresses() {
+  buttonMain.tick();
+  buttonAux.tick();
+}
+
 void setup() {
   setupSerial();
   
@@ -672,17 +763,21 @@ void setup() {
 
   playSoundFontNameSound();
 
+  t.every(10, processButtonPresses);
+
+  startOscillateButtonMainLED();
+  startOscillateButtonAuxLED();
+
 #ifdef DEBUG_MORE
   Serial.println(F("setup(): Ready!"));
 #endif
 }
 
-void loop() {
-  buttonMain.tick();
-  buttonAux.tick();
-
+void loop() {  
 //  if (saberOn) {
 //    processMovement();
 //    checkForMovement();
 //  }
+
+  t.update();
 }

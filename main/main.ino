@@ -1,3 +1,5 @@
+#include <avr/sleep.h>
+
 #include <SdFat.h>
 #include <TMRpcm.h>
 #include <OneButton.h>
@@ -12,7 +14,7 @@
 #define DEBUG_WIP
 
 #define SD_SELECT_PIN       4
-#define BUTTON_MAIN_PIN     5
+#define BUTTON_MAIN_PIN     2
 #define BUTTON_MAIN_LED_PIN 7
 #define BUTTON_AUX_PIN      6
 #define BUTTON_AUX_LED_PIN  8
@@ -21,6 +23,9 @@
 
 #define BUTTON_CLICK_TICKS  200
 #define BUTTON_PRESS_TICKS  700
+
+#define MAX_SECONDS_BEFORE_SLEEP 30
+#define MAX_SECONDS_BEFORE_DEEP_SLEEP 30
 
 #define MAX_SOUND_FONT_COUNT 4
 #define MAX_SOUND_FONT_FOLDER_LENGTH  24
@@ -77,12 +82,15 @@ int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LE
 
 byte buttonMainLEDEvent = 0;
 byte buttonAuxLEDEvent = 0;
+byte goToSleepEvent = 0;
+byte secondsIdle = 0;
 
 boolean playSounds = true;
 
 boolean saberOn = false;
 boolean soundAvailable = false;
 boolean playingLockupSound = false;
+boolean backFromSleep = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -141,7 +149,6 @@ void setupLED() {
 
 void setupSwitches() {
   pinMode(BUTTON_MAIN_LED_PIN, OUTPUT);
-//  digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
   turnOffButtonMainLED();
   
   buttonMain.setClickTicks(BUTTON_CLICK_TICKS);
@@ -150,7 +157,6 @@ void setupSwitches() {
   buttonMain.attachLongPressStart(mainButtonLongPress);
 
   pinMode(BUTTON_AUX_LED_PIN, OUTPUT);
-//  digitalWrite(BUTTON_AUX_LED_PIN, LOW);
   turnOffButtonAuxLED();
 
   buttonAux.setClickTicks(BUTTON_CLICK_TICKS);
@@ -199,11 +205,31 @@ void setupAudio() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
+void processButtonPresses() {
+  buttonMain.tick();
+  buttonAux.tick();
+}
+
+boolean amBackFromSleep() {
+#ifdef DEBUG_MORE
+  Serial.print(F("amBackFromSleep(): press! backFromSleep: "));
+  Serial.println(backFromSleep);
+#endif
+  if (backFromSleep) { 
+    backFromSleep = false;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void mainButtonPress() {
 #ifdef DEBUG_MORE
   Serial.print(F("mainButtonPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
+  if (amBackFromSleep()) { return; }
+
   if (saberOn) {
     turnOnButtonAuxLED(); 
     playSoundFontSwingSound();
@@ -217,6 +243,8 @@ void mainButtonLongPress() {
   Serial.print(F("mainButtonLongPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
+  if (amBackFromSleep()) { return; }
+  
   if (saberOn) { turnSaberOff(); }
 }
 
@@ -225,6 +253,8 @@ void auxButtonPress() {
   Serial.print(F("auxButtonPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
+  if (amBackFromSleep()) { return; }
+
   if (saberOn) { 
     turnOnButtonAuxLED();
     playSoundFontClashSound();
@@ -238,6 +268,8 @@ void auxButtonLongPress() {
   Serial.print(F("auxButtonLongPress(): press! saberOn: "));
   Serial.println(saberOn);
 #endif
+  if (amBackFromSleep()) { return; }
+  
   if (saberOn) { playLockupSound(); }
 }
 
@@ -248,9 +280,30 @@ void turnOnButtonMainLED() {
   digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
 }
 
+void flashButtonMainLED(byte wait=100) {
+  digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
+  delay(wait);
+  digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
+}
+
 void turnOffButtonMainLED() {
   stopOscillateButtonMainLED();
   digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
+}
+
+void startSleepWatchDog() {
+  goToSleepEvent = t.every(1000, goToSleep);
+}
+
+void stopSleepWatchDog() {
+#ifdef DEBUG_MORE
+  Serial.print(F("stopSleepWatchDog(): goToSleepEvent: "));
+  Serial.println(goToSleepEvent);
+#endif
+  if (goToSleepEvent > 0) {
+    t.stop(goToSleepEvent);
+    goToSleepEvent = 0;
+  }
 }
 
 void startOscillateButtonMainLED(unsigned int speed=750) {
@@ -260,7 +313,7 @@ void startOscillateButtonMainLED(unsigned int speed=750) {
 }
 
 void stopOscillateButtonMainLED() {
-#ifdef DEBUG_WIP
+#ifdef DEBUG_MORE
   Serial.print(F("stopOscillateButtonMainLED(): buttonMainLEDEvent: "));
   Serial.println(buttonMainLEDEvent);
 #endif
@@ -287,7 +340,7 @@ void startOscillateButtonAuxLED(unsigned int speed=750) {
 }
 
 void stopOscillateButtonAuxLED() {
-#ifdef DEBUG_WIP
+#ifdef DEBUG_MORE
   Serial.print(F("stopOscillateButtonAuxLED(): buttonAuxLEDEvent: "));
   Serial.println(buttonAuxLEDEvent);
 #endif
@@ -426,6 +479,8 @@ void turnSaberOn() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
 #endif
+    stopSleepWatchDog();
+    
     turnOnButtonMainLED();
     turnOnButtonAuxLED();
     
@@ -441,8 +496,11 @@ void turnSaberOff() {
 #endif        
     playSoundFontPowerOffSound();
 
+    waitForSoundToFinish();
+
     startOscillateButtonMainLED();
     startOscillateButtonAuxLED();
+    startSleepWatchDog();
     
     saberOn = false;
   }
@@ -742,9 +800,53 @@ unsigned int soundVolume() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
-void processButtonPresses() {
-  buttonMain.tick();
-  buttonAux.tick();
+void wakeUpNow() {
+  backFromSleep = true;
+
+  startOscillateButtonMainLED();
+  startOscillateButtonAuxLED();
+}
+
+ISR(WDT_vect) {
+  if (secondsIdle < MAX_SECONDS_BEFORE_DEEP_SLEEP) {
+    flashButtonMainLED();
+    secondsIdle++;
+  }
+}
+
+void goToSleep() {
+  if (secondsIdle < MAX_SECONDS_BEFORE_SLEEP) {
+#ifdef DEBUG_MORE
+  Serial.print(F("goToSleep(): Not sleeping, secondsIdle: "));
+  Serial.println(secondsIdle);
+#endif    
+    secondsIdle++;
+    return;
+  }
+  
+#ifdef DEBUG_MORE
+  Serial.println(F("goToSleep(): Sleeping.."));
+#endif
+  delay(150);
+
+  turnOffButtonMainLED();
+  turnOffButtonAuxLED();
+
+  secondsIdle = 0;
+
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+
+  // http://citizen-sensing.org/2013/07/arduino-watchdog/
+  MCUSR &= ~(1 << WDRF);
+  WDTCSR |= (1 << WDCE) | (1 << WDE);
+  WDTCSR = (1<< WDP0) | (1 << WDP1) | (1 << WDP2);
+  WDTCSR |= (1 << WDIE);
+  
+  sleep_enable();
+  attachInterrupt(0, wakeUpNow, LOW);
+  sleep_mode();
+  sleep_disable();
+  detachInterrupt(0);
 }
 
 void setup() {
@@ -764,7 +866,8 @@ void setup() {
   playSoundFontNameSound();
 
   t.every(10, processButtonPresses);
-
+  
+  startSleepWatchDog();
   startOscillateButtonMainLED();
   startOscillateButtonAuxLED();
 

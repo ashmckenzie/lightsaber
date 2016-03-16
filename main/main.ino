@@ -6,7 +6,7 @@
 //#include <MPU6050_6Axis_MotionApps20.h>
 //#include <IniFile.h>
 
-#define DEBUG
+//#define DEBUG
 //#define DEBUG_MORE
 //#define DEBUG_WIP
 
@@ -71,7 +71,7 @@ SdFat sd;
 
 int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LENGTH);
 
-boolean playSounds = false;
+boolean playSounds = true;
 
 boolean saberOn = false;
 boolean soundAvailable = false;
@@ -92,7 +92,7 @@ void fireLED(int delayLength) {
 /* -------------------------------------------------------------------------------------------------- */
 
 void setupSerial() {
-  Serial.begin(38400);
+  Serial.begin(115200);
 }
 
 void setupLED() {
@@ -186,7 +186,8 @@ void setupAudio() {
 
 void mainButtonPress() {
 #ifdef DEBUG_MORE
-  Serial.println(F("mainButtonPress(): press!"));
+  Serial.print(F("mainButtonPress(): press! saberOn: "));
+  Serial.println(saberOn);
 #endif
 //  fireLED(300);
   (saberOn) ? playSoundFontSwingSound() : turnSaberOn();
@@ -194,14 +195,16 @@ void mainButtonPress() {
 
 void mainButtonLongPress() {
 #ifdef DEBUG_MORE
-  Serial.println(F("mainButtonLongPress(): press!"));
+  Serial.print(F("mainButtonLongPress(): press! saberOn: "));
+  Serial.println(saberOn);
 #endif
   if (saberOn) { turnSaberOff(); }
 }
 
 void auxButtonPress() {
 #ifdef DEBUG_MORE
-  Serial.println(F("auxButtonPress(): press!"));
+  Serial.print(F("auxButtonPress(): press! saberOn: "));
+  Serial.println(saberOn);
 #endif
 //  fireLED(300);
   (saberOn) ? playSoundFontClashSound() : selectNextSoundFont();
@@ -209,7 +212,8 @@ void auxButtonPress() {
 
 void auxButtonLongPress() {
 #ifdef DEBUG_MORE
-  Serial.println(F("auxButtonLongPress(): press!"));
+  Serial.print(F("auxButtonLongPress(): press! saberOn: "));
+  Serial.println(saberOn);
 #endif
   if (saberOn) { playLockupSound(); }
 }
@@ -221,10 +225,20 @@ void waitForSoundToFinish() {
 }
 
 void getCurrentSoundFontDirectory(char *filename, char *fullFilename) {
-  char currentSoundFontName[MAX_SOUND_FONT_FOLDER_LENGTH];
+  char name[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-  getCurrentSoundFontName(currentSoundFontName);
-  sprintf(fullFilename, "/fonts/%s/%s", currentSoundFontName, filename);
+#ifdef DEBUG_MORE
+  Serial.println(F("getCurrentSoundFontDirectory(): HERE"));
+#endif 
+
+  getStoredSoundFontName(name);
+
+#ifdef DEBUG_MORE
+  Serial.print(F("getCurrentSoundFontDirectory(): name: "));
+  Serial.println(name);
+#endif 
+  
+  sprintf(fullFilename, "/fonts/%s/%s", name, filename);
 }
 
 void playSound(char *filename, boolean force=false, boolean loopIt=false) {
@@ -248,9 +262,24 @@ void playSound(char *filename, boolean force=false, boolean loopIt=false) {
 }
 
 void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
-  char fullFilename[60];
+  char fullFilename[80];
+
+#ifdef DEBUG_MORE
+  Serial.print(F("playFontSound(): filename: "));
+  Serial.print(filename);
+  Serial.print(F(", force: "));
+  Serial.print(force);
+  Serial.print(F(", loopIt: "));
+  Serial.println(loopIt);
+#endif 
 
   getCurrentSoundFontDirectory(filename, fullFilename);
+
+#ifdef DEBUG_MORE
+  Serial.print(F("playFontSound(): fullFilename: "));
+  Serial.println(fullFilename);
+#endif 
+  
   playSound(fullFilename, force, loopIt);
 }
 
@@ -316,8 +345,8 @@ void turnSaberOn() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
 #endif    
-    playFontSoundWithHum(POWER_ON_SOUND_FILE_NAME);
-    setLED(HIGH);
+    playSoundFontPowerOnSound();
+//    setLED(HIGH);
     saberOn = true;
   }
 }
@@ -327,8 +356,8 @@ void turnSaberOff() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("turnSaberOff(): Turning saber OFF!"));
 #endif        
-    playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
-    setLED(LOW);
+    playSoundFontPowerOffSound();
+//    setLED(LOW);
     saberOn = false;
   }
 }
@@ -451,7 +480,16 @@ void getCurrentSoundFontName(char *name) {
   byte index = 0;
   boolean nameValid;
 
+#ifdef DEBUG_MORE
+  Serial.println(F("getCurrentSoundFontName(): HERE"));
+#endif
+
   getStoredSoundFontName(name);
+
+#ifdef DEBUG_MORE
+  Serial.print(F("getCurrentSoundFontName(): name: "));
+  Serial.println(name);
+#endif
 
   nameValid = getIndexForSoundFontName(&index, name);
 

@@ -5,6 +5,7 @@
 #include <OneButton.h>
 #include <EEPROMex.h>
 #include <Timer.h>
+#include <LowPower.h>
 
 //#include <MPU6050_6Axis_MotionApps20.h>
 //#include <IniFile.h>
@@ -24,8 +25,8 @@
 #define BUTTON_CLICK_TICKS  200
 #define BUTTON_PRESS_TICKS  700
 
-#define MAX_SECONDS_BEFORE_SLEEP 30
-#define MAX_SECONDS_BEFORE_DEEP_SLEEP 30
+#define MAX_SECONDS_BEFORE_SLEEP      60   // 1 minute
+#define MAX_SECONDS_BEFORE_DEEP_SLEEP 300  // 5 minutes
 
 #define MAX_SOUND_FONT_COUNT 4
 #define MAX_SOUND_FONT_FOLDER_LENGTH  24
@@ -82,7 +83,7 @@ int addressCharArray = EEPROM.getAddress(sizeof(char) * MAX_SOUND_FONT_FOLDER_LE
 
 byte buttonMainLEDEvent = 0;
 byte buttonAuxLEDEvent = 0;
-byte goToSleepEvent = 0;
+byte checkIfShouldSleepEvent = 0;
 byte secondsIdle = 0;
 
 boolean playSounds = true;
@@ -90,7 +91,8 @@ boolean playSounds = true;
 boolean saberOn = false;
 boolean soundAvailable = false;
 boolean playingLockupSound = false;
-boolean backFromSleep = false;
+boolean sleeping = false;
+boolean justBackFromSleep = false;
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -212,11 +214,11 @@ void processButtonPresses() {
 
 boolean amBackFromSleep() {
 #ifdef DEBUG_MORE
-  Serial.print(F("amBackFromSleep(): press! backFromSleep: "));
-  Serial.println(backFromSleep);
+  Serial.print(F("amBackFromSleep(): justBackFromSleep: "));
+  Serial.println(justBackFromSleep);
 #endif
-  if (backFromSleep) { 
-    backFromSleep = false;
+  if (justBackFromSleep) { 
+    justBackFromSleep = false;
     return true;
   } else {
     return false;
@@ -225,7 +227,7 @@ boolean amBackFromSleep() {
 
 void mainButtonPress() {
 #ifdef DEBUG_MORE
-  Serial.print(F("mainButtonPress(): press! saberOn: "));
+  Serial.print(F("mainButtonPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
   if (amBackFromSleep()) { return; }
@@ -240,7 +242,7 @@ void mainButtonPress() {
 
 void mainButtonLongPress() {
 #ifdef DEBUG_MORE
-  Serial.print(F("mainButtonLongPress(): press! saberOn: "));
+  Serial.print(F("mainButtonLongPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
   if (amBackFromSleep()) { return; }
@@ -250,7 +252,7 @@ void mainButtonLongPress() {
 
 void auxButtonPress() {
 #ifdef DEBUG_MORE
-  Serial.print(F("auxButtonPress(): press! saberOn: "));
+  Serial.print(F("auxButtonPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
   if (amBackFromSleep()) { return; }
@@ -265,7 +267,7 @@ void auxButtonPress() {
 
 void auxButtonLongPress() {
 #ifdef DEBUG_MORE
-  Serial.print(F("auxButtonLongPress(): press! saberOn: "));
+  Serial.print(F("auxButtonLongPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
   if (amBackFromSleep()) { return; }
@@ -280,7 +282,7 @@ void turnOnButtonMainLED() {
   digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
 }
 
-void flashButtonMainLED(byte wait=100) {
+void flashButtonMainLED(byte wait=50) {
   digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
   delay(wait);
   digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
@@ -291,18 +293,19 @@ void turnOffButtonMainLED() {
   digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
 }
 
-void startSleepWatchDog() {
-  goToSleepEvent = t.every(1000, goToSleep);
+void startIdleMonitor() {
+  secondsIdle = 0;
+  checkIfShouldSleepEvent = t.every(1000, checkIfShouldSleep);
 }
 
-void stopSleepWatchDog() {
+void stopIdleMonitor() {
 #ifdef DEBUG_MORE
-  Serial.print(F("stopSleepWatchDog(): goToSleepEvent: "));
-  Serial.println(goToSleepEvent);
+  Serial.print(F("stopIdleMonitor(): checkIfShouldSleepEvent: "));
+  Serial.println(checkIfShouldSleepEvent);
 #endif
-  if (goToSleepEvent > 0) {
-    t.stop(goToSleepEvent);
-    goToSleepEvent = 0;
+  if (checkIfShouldSleepEvent > 0) {
+    t.stop(checkIfShouldSleepEvent);
+    checkIfShouldSleepEvent = 0;
   }
 }
 
@@ -377,7 +380,7 @@ void playSound(char *filename, boolean force=false, boolean loopIt=false) {
   char str[100];
 
 #ifdef DEBUG || DEBUG_MORE
-  sprintf(str, "playSound(): Playing '%s' (playSounds: %d, force: %d, loop: %d)", filename, playSounds, force, loopIt);
+  sprintf(str, "playSound(): %s (force: %d, loop: %d)", filename, force, loopIt);
   Serial.println(str);
 #endif
   
@@ -479,7 +482,7 @@ void turnSaberOn() {
 #ifdef DEBUG || DEBUG_MORE
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
 #endif
-    stopSleepWatchDog();
+    stopIdleMonitor();
     
     turnOnButtonMainLED();
     turnOnButtonAuxLED();
@@ -500,7 +503,8 @@ void turnSaberOff() {
 
     startOscillateButtonMainLED();
     startOscillateButtonAuxLED();
-    startSleepWatchDog();
+    
+    startIdleMonitor();
     
     saberOn = false;
   }
@@ -801,52 +805,75 @@ unsigned int soundVolume() {
 /* -------------------------------------------------------------------------------------------------- */
 
 void wakeUpNow() {
-  backFromSleep = true;
-
-  startOscillateButtonMainLED();
-  startOscillateButtonAuxLED();
+  sleeping = false;
+  justBackFromSleep = true;
 }
 
-ISR(WDT_vect) {
-  if (secondsIdle < MAX_SECONDS_BEFORE_DEEP_SLEEP) {
-    flashButtonMainLED();
-    secondsIdle++;
-  }
-}
-
-void goToSleep() {
+void checkIfShouldSleep() {
+  long counter = 0;
+  
   if (secondsIdle < MAX_SECONDS_BEFORE_SLEEP) {
 #ifdef DEBUG_MORE
-  Serial.print(F("goToSleep(): Not sleeping, secondsIdle: "));
-  Serial.println(secondsIdle);
+  Serial.print(F("checkIfShouldSleep(): Not sleeping, "));
+  Serial.print(secondsIdle);
+  Serial.print(F(" < "));
+  Serial.println(MAX_SECONDS_BEFORE_SLEEP);  
+
 #endif    
     secondsIdle++;
     return;
   }
   
-#ifdef DEBUG_MORE
-  Serial.println(F("goToSleep(): Sleeping.."));
+#ifdef DEBUG
+  Serial.println(F("checkIfShouldSleep(): Sleeping.."));
 #endif
-  delay(150);
+  delay(100);
 
   turnOffButtonMainLED();
   turnOffButtonAuxLED();
 
+  sleeping = true;
   secondsIdle = 0;
 
-  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  stopIdleMonitor(); 
 
-  // http://citizen-sensing.org/2013/07/arduino-watchdog/
-  MCUSR &= ~(1 << WDRF);
-  WDTCSR |= (1 << WDCE) | (1 << WDE);
-  WDTCSR = (1<< WDP0) | (1 << WDP1) | (1 << WDP2);
-  WDTCSR |= (1 << WDIE);
-  
-  sleep_enable();
-  attachInterrupt(0, wakeUpNow, LOW);
-  sleep_mode();
-  sleep_disable();
-  detachInterrupt(0);
+  while (sleeping) {
+    counter = counter + 8;
+    attachInterrupt(0, wakeUpNow, LOW);
+
+#ifdef DEBUG_MORE
+  Serial.print(F("checkIfShouldSleep(): counter: "));
+  Serial.println(counter);
+  delay(100);
+#endif        
+    
+    if (counter < MAX_SECONDS_BEFORE_DEEP_SLEEP) {
+#ifdef DEBUG_MORE
+  Serial.print(F("checkIfShouldSleep(): Sleeping for 8 secs.."));
+  Serial.println(counter);
+  delay(100);
+#endif        
+      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    } else {
+#ifdef DEBUG_MORE
+  Serial.println(F("checkIfShouldSleep(): Sleeping FOREVER."));
+  delay(100);
+#endif              
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);    
+    }
+    
+#ifdef DEBUG_MORE
+    Serial.println(F("checkIfShouldSleep(): flashButtonMainLED()"));
+    delay(100);
+#endif    
+    flashButtonMainLED();
+    detachInterrupt(0);
+  }
+
+  startIdleMonitor();
+
+  startOscillateButtonMainLED();
+  startOscillateButtonAuxLED();
 }
 
 void setup() {
@@ -867,7 +894,7 @@ void setup() {
 
   t.every(10, processButtonPresses);
   
-  startSleepWatchDog();
+  startIdleMonitor();
   startOscillateButtonMainLED();
   startOscillateButtonAuxLED();
 
@@ -877,10 +904,10 @@ void setup() {
 }
 
 void loop() {  
-//  if (saberOn) {
+  if (saberOn) {
 //    processMovement();
 //    checkForMovement();
-//  }
+  }
 
   t.update();
 }

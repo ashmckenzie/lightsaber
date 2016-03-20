@@ -1,5 +1,5 @@
 #!/bin/bash
 
-FONTS_BASE="/Volumes/LS/fonts"
+BASE="/Volumes/LS"
 
-find "${FONTS_BASE}" -type f -name ._\*.wav -delete
+find "${BASE}" -name ._* -ls -delete

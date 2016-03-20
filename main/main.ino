@@ -11,8 +11,9 @@
 //#include <IniFile.h>
 
 //#define DEBUG
-//#define DEBUG_MORE
 #define DEBUG_WIP
+
+//#define ENABLE_SLEEP
 
 #define SD_SELECT_PIN       4
 #define BUTTON_MAIN_PIN     2
@@ -28,7 +29,7 @@
 #define MAX_SECONDS_BEFORE_SLEEP      60   // 1 minute
 #define MAX_SECONDS_BEFORE_DEEP_SLEEP 300  // 5 minutes
 
-#define MAX_SOUND_FONT_COUNT 4
+#define MAX_SOUND_FONT_COUNT          10
 #define MAX_SOUND_FONT_FOLDER_LENGTH  24
 
 #define SOUND_FONTS_BASE "/fonts"
@@ -125,7 +126,7 @@ void setupLED() {
 //  mpu.initialize();
 //
 //  if (!mpu.testConnection()) {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.println(F("setupAccelerometer(): MPU6050 failed"));
 //#endif
 //    return;
@@ -147,7 +148,7 @@ void setupLED() {
 //  mpu.getIntStatus();
 //  packetSize = mpu.dmpGetFIFOPacketSize();
 //
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //  Serial.println(F("setupAccelerometer(): MPU6050 ready!"));
 //#endif
 //}
@@ -174,8 +175,8 @@ void setupSDCard() {
   pinMode(SD_SELECT_PIN, OUTPUT);
   digitalWrite(SD_SELECT_PIN, HIGH);
 
-  if (!sd.begin(SD_SELECT_PIN)) {
-#ifdef DEBUG_MORE    
+  if (!sd.begin(SD_SELECT_PIN, SPI_FULL_SPEED)) {
+#ifdef DEBUG    
     Serial.println(F("setupSDCard(): sd.begin() failed"));
 #endif
     return;
@@ -188,14 +189,14 @@ void setupSDCard() {
 //  IniFile configFile("/config.ini");
 //
 //  if (! configFile.open(sd)) {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.println(F("setupConfigFile(): INI file does not exist"));
 //#endif
 //    return;
 //  }
 //
 //  if (!configFile.validate(buffer, bufferLen)) {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.println(F("setupConfigFile(): INI file is invalid"));
 //#endif
 //    return;
@@ -204,7 +205,7 @@ void setupSDCard() {
 
 void setupAudio() {
   audio.speakerPin = SPEAKER_PIN;
-//  audio.setVolume(soundVolume());
+  audio.setVolume(soundVolume());
   soundAvailable = true;
 }
 
@@ -216,7 +217,7 @@ void processButtonPresses() {
 }
 
 boolean amBackFromSleep() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("amBackFromSleep(): justBackFromSleep: "));
   Serial.println(justBackFromSleep);
 #endif
@@ -229,7 +230,7 @@ boolean amBackFromSleep() {
 }
 
 void mainButtonPress() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("mainButtonPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
@@ -244,7 +245,7 @@ void mainButtonPress() {
 }
 
 void mainButtonLongPress() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("mainButtonLongPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
@@ -254,13 +255,15 @@ void mainButtonLongPress() {
     turnSaberOff();
   } else {
     playPoweringDownSound();
-    delay(1200);
+    delay(1000);
+#ifdef ENABLE_SLEEP
     goToSleep(true);
+#endif
   }
 }
 
 void auxButtonPress() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("auxButtonPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
@@ -275,7 +278,7 @@ void auxButtonPress() {
 }
 
 void auxButtonLongPress() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("auxButtonLongPress(): saberOn: "));
   Serial.println(saberOn);
 #endif
@@ -306,11 +309,13 @@ void turnOffButtonMainLED() {
 
 void startIdleMonitor() {
   secondsIdle = 0;
+#ifdef ENABLE_SLEEP  
   checkIfShouldSleepEvent = t.every(1000, checkIfShouldSleep);
+#endif
 }
 
 void stopIdleMonitor() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("stopIdleMonitor(): checkIfShouldSleepEvent: "));
   Serial.println(checkIfShouldSleepEvent);
 #endif
@@ -327,7 +332,7 @@ void startOscillateButtonMainLED(unsigned int speed=750) {
 }
 
 void stopOscillateButtonMainLED() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("stopOscillateButtonMainLED(): buttonMainLEDEvent: "));
   Serial.println(buttonMainLEDEvent);
 #endif
@@ -354,7 +359,7 @@ void startOscillateButtonAuxLED(unsigned int speed=750) {
 }
 
 void stopOscillateButtonAuxLED() {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("stopOscillateButtonAuxLED(): buttonAuxLEDEvent: "));
   Serial.println(buttonAuxLEDEvent);
 #endif
@@ -370,33 +375,57 @@ void waitForSoundToFinish() {
   if (soundAvailable) { while (audio.isPlaying()) { }; }
 }
 
-void getCurrentSoundFontDirectory(char *filename, char *fullFilename) {
+void getCurrentSoundFontDirectory(char *soundFontDirectory) {
   char name[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("getCurrentSoundFontDirectory(): HERE"));
 #endif 
 
   getStoredSoundFontName(name);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getCurrentSoundFontDirectory(): name: "));
   Serial.println(name);
 #endif 
   
-  sprintf(fullFilename, "/fonts/%s/%s", name, filename);
+  sprintf(soundFontDirectory, "%s/%s", SOUND_FONTS_BASE, name);
+}
+
+void getFullSoundFontFilePath(char *filename, char *fullFilename) {
+  char soundFontDirectory[80] = "";
+  char name[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
+
+#ifdef DEBUG
+  Serial.println(F("getFullSoundFontFilePath(): HERE"));
+#endif 
+
+  getCurrentSoundFontDirectory(soundFontDirectory);
+  getStoredSoundFontName(name);
+
+#ifdef DEBUG
+  Serial.print(F("getFullSoundFontFilePath(): name: "));
+  Serial.println(name);
+#endif 
+  
+  sprintf(fullFilename, "%s/%s", soundFontDirectory, filename);
+}
+
+void stopSound() {
+  audio.loop(false);
+  audio.stopPlayback();
 }
 
 void playSound(char *filename, boolean force=false, boolean loopIt=false) {
   char str[100];
 
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG || DEBUG
   sprintf(str, "playSound(): %s (force: %d, loop: %d)", filename, force, loopIt);
   Serial.println(str);
 #endif
   
   if (force) {
-    if (soundAvailable) { audio.stopPlayback(); }
+    if (soundAvailable) { stopSound(); }
   } else {
     waitForSoundToFinish();
   }
@@ -410,7 +439,7 @@ void playSound(char *filename, boolean force=false, boolean loopIt=false) {
 void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
   char fullFilename[80];
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("playFontSound(): filename: "));
   Serial.print(filename);
   Serial.print(F(", force: "));
@@ -419,9 +448,9 @@ void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
   Serial.println(loopIt);
 #endif 
 
-  getCurrentSoundFontDirectory(filename, fullFilename);
+  getFullSoundFontFilePath(filename, fullFilename);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("playFontSound(): fullFilename: "));
   Serial.println(fullFilename);
 #endif 
@@ -473,18 +502,83 @@ void playSoundFontPowerOffSound() {
   playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
 }
 
-void playSoundFontSwingSound() {
-  char sound[128];
+boolean fileExistsOnSDCard(char *file) {
+  stopSound();
+  delay(100);
+  return sd.exists(file);  
+}
+
+boolean nextSoundFile(char *format, byte *number, char *filename) { 
+  char tmpFilename[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
+  char fullFilename[80] = "";
+
+  while (true) {
+    sprintf(tmpFilename, format, *number);
+    getFullSoundFontFilePath(tmpFilename, fullFilename);
+
+#ifdef DEBUG
+    Serial.print(F("nextSoundFile(): fullFilename: "));
+    Serial.println(fullFilename);
+#endif
+
+    if (fileExistsOnSDCard(fullFilename)) {
+#ifdef DEBUG
+      Serial.println(F("nextSoundFile(): exists!"));
+#endif  
+      sprintf(filename, tmpFilename);
+      break;
+    } else {
+#ifdef DEBUG
+      Serial.println(F("nextSoundFile(): does not exist"));
+#endif
+      if (*number == 1) {
+#ifdef DEBUG
+      Serial.println(F("nextSoundFile(): Cannot find a file to play :("));
+#endif
+        return false;
+      }
+      
+      *number = 1;
+    }
+  }
   
-  sprintf(sound, SWING_SOUND_FILE_FORMAT, currentSwingSound);
-  playFontSoundWithHum(sound);
+  *number = *number + 1;
+
+  return true;
+}
+
+void playSoundFontSwingSound() {
+  char filename[80] = "";
+
+  if (nextSoundFile(SWING_SOUND_FILE_FORMAT, &currentSwingSound, filename)) {
+#ifdef DEBUG_WIP
+    Serial.print(F("playSoundFontSwingSound(): filename: "));
+    Serial.println(filename);
+      playFontSoundWithHum(filename);
+#endif
+  } else {
+#ifdef DEBUG_WIP
+    Serial.println(F("playSoundFontSwingSound(): NO filename found :("));
+    playSoundFontIdleSound(true);
+#endif
+  }
 }
 
 void playSoundFontClashSound() {
-  char sound[128];
-  
-  sprintf(sound, CLASH_SOUND_FILE_FORMAT, currentSwingSound);
-  playFontSoundWithHum(sound);
+  char filename[80] = "";
+
+  if (nextSoundFile(CLASH_SOUND_FILE_FORMAT, &currentClashSound, filename)) {
+#ifdef DEBUG_WIP
+    Serial.print(F("playSoundFontClashSound(): filename: "));
+    Serial.println(filename);
+      playFontSoundWithHum(filename);
+#endif
+  } else {
+#ifdef DEBUG_WIP
+    Serial.println(F("playSoundFontClashSound(): NO filename found :("));
+    playSoundFontIdleSound(true);
+#endif
+  }
 }
 
 void playSoundFontNameSound() {
@@ -500,7 +594,7 @@ void playFontSoundWithHum(char *filename) {
 
 void turnSaberOn() {
   if (!saberOn) {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG || DEBUG
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
 #endif
     stopIdleMonitor();
@@ -515,7 +609,7 @@ void turnSaberOn() {
 
 void turnSaberOff() {
   if (saberOn) {
-#ifdef DEBUG || DEBUG_MORE
+#ifdef DEBUG || DEBUG
   Serial.println(F("turnSaberOff(): Turning saber OFF!"));
 #endif        
     playSoundFontPowerOffSound();
@@ -533,7 +627,7 @@ void turnSaberOff() {
 
 void selectNextSoundFont() {
   if (!saberOn) {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("selectNextSoundFont(): HERE"));
 #endif        
     selectNextSoundFontName();
@@ -545,13 +639,13 @@ void selectNextSoundFontName() {
   char name[MAX_SOUND_FONT_FOLDER_LENGTH];
   char availableSoundFontNames[MAX_SOUND_FONT_COUNT][MAX_SOUND_FONT_FOLDER_LENGTH];
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("selectNextSoundFontName(): HERE"));
 #endif
 
   getNextSoundFontName(name);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("selectNextSoundFontName(): name: "));
   Serial.println(name);
 #endif
@@ -565,23 +659,23 @@ void getNextSoundFontName(char *name) {
 
   if (getIndexForSoundFontName(&index, name)) {
     if (index < (MAX_SOUND_FONT_COUNT - 1)) {
-#ifdef DEBUG_MORE      
+#ifdef DEBUG
       Serial.print(F("getNextSoundFontName(): index: "));
       Serial.print(index);
 #endif
       index = index + 1;
-#ifdef DEBUG_MORE      
+#ifdef DEBUG
       Serial.print(F(", index: "));
       Serial.println(index);
 #endif      
     } else {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
       Serial.println(F("getNextSoundFontName(): index: 0 (forced)"));
 #endif
       index = 0;
     }
   } else {
-#ifdef DEBUG_MORE    
+#ifdef DEBUG
     Serial.println(F("getNextSoundFontName(): index: 0 (returned false)"));
 #endif    
     index = 0;
@@ -589,7 +683,7 @@ void getNextSoundFontName(char *name) {
   
   getAvailableSoundFontNames(availableSoundFontNames);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getNextSoundFontName(): availableSoundFontNames["));
   Serial.print(index);
   Serial.print(F("]: "));
@@ -606,20 +700,20 @@ boolean getIndexForSoundFontName(byte *index, char *name) {
   getStoredSoundFontName(storedSoundFontName);
   getAvailableSoundFontNames(availableSoundFontNames);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getIndexForSoundFontName(): storedSoundFontName: "));
   Serial.println(storedSoundFontName);
 #endif
 
   if (!storedSoundFontName) {
-#ifdef DEBUG_MORE    
+#ifdef DEBUG
     Serial.println(F("getIndexForSoundFontName(): !storedSoundFontName - return false"));
 #endif    
     return false;
   }
 
   for (byte i = 0 ; i < MAX_SOUND_FONT_COUNT ; i++) {
-#ifdef DEBUG_MORE    
+#ifdef DEBUG
     Serial.print(F("getIndexForSoundFontName(): availableSoundFontNames["));
     Serial.print(i);
     Serial.print(F("]: "));
@@ -629,7 +723,7 @@ boolean getIndexForSoundFontName(byte *index, char *name) {
     if (strcmp(availableSoundFontNames[i], storedSoundFontName) == 0) {
       *index = i;
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
       Serial.print(F("getIndexForSoundFontName(): index: "));
       Serial.print(i);
       Serial.println(F(", return true"));
@@ -638,7 +732,7 @@ boolean getIndexForSoundFontName(byte *index, char *name) {
     }
   }
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("getIndexForSoundFontName(): return false"));
 #endif
   
@@ -649,20 +743,20 @@ void getCurrentSoundFontName(char *name) {
   byte index = 0;
   boolean nameValid;
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("getCurrentSoundFontName(): HERE"));
 #endif
 
   getStoredSoundFontName(name);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getCurrentSoundFontName(): name: "));
   Serial.println(name);
 #endif
 
   nameValid = getIndexForSoundFontName(&index, name);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getCurrentSoundFontName(): strlen(name) == 0: "));
   Serial.print(strlen(name) == 0);
   Serial.print(F(" || !nameValid: "));
@@ -671,7 +765,7 @@ void getCurrentSoundFontName(char *name) {
 
   if (strlen(name) == 0 || !nameValid) {
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("getCurrentSoundFontName(): (strlen(name) == 0 || !nameValid) == true "));
 #endif
   
@@ -679,7 +773,7 @@ void getCurrentSoundFontName(char *name) {
     storeSelectedSoundFontName(name);
   }
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getCurrentSoundFontName(): name: "));
   Serial.println(name);
 #endif
@@ -688,9 +782,10 @@ void getCurrentSoundFontName(char *name) {
 void getStoredSoundFontName(char *name) {
   char str[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
+  EEPROM.writeBlock<char>(addressCharArray, "black_star", MAX_SOUND_FONT_FOLDER_LENGTH);
   EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("getStoredSoundFontName(): str: "));
   Serial.println(str);
 #endif
@@ -699,7 +794,7 @@ void getStoredSoundFontName(char *name) {
 }
 
 void storeSelectedSoundFontName(char *name) {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("storeSelectedSoundFontName(): Storing font: "));
   Serial.println(name);
 #endif
@@ -718,7 +813,7 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
 
   while (file.openNext(&root, O_READ)) {
     file.getName(buffer, MAX_SOUND_FONT_FOLDER_LENGTH);
-#ifdef DEBUG_MORE    
+#ifdef DEBUG
     Serial.print(F("getAvailableSoundFontNames(): "));
     Serial.println(buffer);
 #endif    
@@ -732,7 +827,7 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
 /* -------------------------------------------------------------------------------------------------- */
 
 unsigned int soundVolume() {
-  int currentVolume = 4;
+  int currentVolume = 1;
 
   return currentVolume;
 }
@@ -743,13 +838,13 @@ unsigned int soundVolume() {
 //  return false;
 //
 //  if (configFile.getValue(section, key, buf, MAX_SOUND_FONT_FOLDER_LENGTH)) {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.print(F("readConfig(): "));
 //    Serial.println(buf);
 //#endif
 //    return true;
 //  } else {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.print(F("readConfig(): Could not read value"));
 //#endif
 //    return false;
@@ -803,7 +898,7 @@ unsigned int soundVolume() {
 //  char str[24];
 //  unsigned int val = 1200;
 //
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //  sprint(str, "%d %d %d %d", (abs(q.w) > val), (aaWorld.z < 0), (abs(q.z) < (9 / 2) * val), ((abs(q.x) > (3 * val)) or (abs(q.y) > (3 * val))));
 //  Serial.println(str);
 //#endif
@@ -815,7 +910,7 @@ unsigned int soundVolume() {
 //      && ((abs(q.z) > (3 * val)) || (abs(q.y) > (3 * val)))
 //     )
 //  {
-//#ifdef DEBUG_MORE
+//#ifdef DEBUG
 //    Serial.println(F("checkForMovement(): Movement!"));
 //#endif
 //    playSoundFontSwingSound();
@@ -824,6 +919,7 @@ unsigned int soundVolume() {
 
 /* -------------------------------------------------------------------------------------------------- */
 
+#ifdef ENABLE_SLEEP
 void wakeUpNow() {
   sleeping = false;
   justBackFromSleep = true;
@@ -831,7 +927,7 @@ void wakeUpNow() {
 
 void checkIfShouldSleep() {
   if (secondsIdle < MAX_SECONDS_BEFORE_SLEEP) {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("checkIfShouldSleep(): Not sleeping, "));
   Serial.print(secondsIdle);
   Serial.print(F(" < "));
@@ -839,7 +935,9 @@ void checkIfShouldSleep() {
 #endif    
     secondsIdle++;
   } else {
+#ifdef ENABLE_SLEEP    
     goToSleep(false);
+#endif    
   }
 }
 
@@ -864,13 +962,13 @@ void goToSleep(boolean force) {
     attachInterrupt(0, wakeUpNow, LOW);
 
     if (force || counter >= MAX_SECONDS_BEFORE_DEEP_SLEEP) {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("goToSleep(): Sleeping FOREVER."));
   delay(100);
 #endif              
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);   
     } else {
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.print(F("goToSleep(): Sleeping for 8 secs, counter: "));
   Serial.print(counter);
   Serial.print(F(" < "));
@@ -880,7 +978,7 @@ void goToSleep(boolean force) {
       LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
     }
     
-#ifdef DEBUG_MORE
+#ifdef DEBUG
     Serial.println(F("goToSleep(): flashButtonMainLED()"));
     delay(100);
 #endif    
@@ -893,13 +991,14 @@ void goToSleep(boolean force) {
   startOscillateButtonMainLED();
   startOscillateButtonAuxLED();
 }
+#endif
 
 /* -------------------------------------------------------------------------------------------------- */
 
 void setup() {
   setupSerial();
   
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("setup(): Starting.."));
 #endif
   
@@ -915,10 +1014,11 @@ void setup() {
   t.every(10, processButtonPresses);
   
   startIdleMonitor();
+  
   startOscillateButtonMainLED();
-  startOscillateButtonAuxLED();
+  startOscillateButtonAuxLED(); 
 
-#ifdef DEBUG_MORE
+#ifdef DEBUG
   Serial.println(F("setup(): Ready!"));
 #endif
 }

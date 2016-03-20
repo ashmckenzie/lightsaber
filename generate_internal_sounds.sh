@@ -1,7 +1,7 @@
 #!/bin/bash
 
-VOICE="Samantha"
 SPEED="40"
+VOICE="Samantha"
 OUTPUT_BASE="/Volumes/LS"
 
 create() {
@@ -32,7 +32,8 @@ create_internal 'configuration menu' configuration_menu
 create_internal 'configuration saved' configuration_saved
 create_internal 'powering down' powering_down
 
-create 'black star' 'fonts/black_star'  name
-create 'classic' 'fonts/classic'  name
-create 'old republic jedi' 'fonts/old_republic_jedi'  name
-create 'star killer' 'fonts/star_killer'  name
+create 'black star' 'fonts/black_star' name
+create 'classic' 'fonts/classic' name
+create 'old republic jedi' 'fonts/old_republic_jedi' name
+create 'star killer' 'fonts/star_killer' name
+create 'unstable' 'fonts/unstable' name

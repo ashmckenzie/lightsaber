@@ -33,17 +33,17 @@
 
 #define SOUND_FONTS_BASE "/fonts"
 
-#define OKAY_SOUND_FILE_NAME   "/internal/okay.wav"
-#define BOOT_SOUND_FILE_NAME   "/internal/boot.wav"
-#define LOCKUP_SOUND_FILE_NAME "/internal/lockup.wav"
+#define OKAY_SOUND_FILE_NAME          "/internal/okay.wav"
+#define BOOT_SOUND_FILE_NAME          "/internal/boot.wav"
+#define LOCKUP_SOUND_FILE_NAME        "/internal/lockup.wav"
 #define POWERING_DOWN_SOUND_FILE_NAME "/internal/powering_down.wav"
 
 #define NAME_SOUND_FILE_NAME      "name.wav"
 #define IDLE_SOUND_FILE_NAME      "idle.wav"
 #define POWER_ON_SOUND_FILE_NAME  "poweron.wav"
 #define POWER_OFF_SOUND_FILE_NAME "poweroff.wav"
-#define SWING_SOUND_FILE_NAME     "swing.wav"
-#define CLASH_SOUND_FILE_NAME     "clash.wav"
+#define SWING_SOUND_FILE_FORMAT   "swing%d.wav"
+#define CLASH_SOUND_FILE_FORMAT   "clash%d.wav"
 
 OneButton buttonMain(BUTTON_MAIN_PIN, true);
 OneButton buttonAux(BUTTON_AUX_PIN, true);
@@ -86,6 +86,8 @@ byte buttonMainLEDEvent = 0;
 byte buttonAuxLEDEvent = 0;
 byte checkIfShouldSleepEvent = 0;
 byte secondsIdle = 0;
+byte currentSwingSound = 1;
+byte currentClashSound = 1;
 
 boolean playSounds = true;
 
@@ -436,15 +438,15 @@ void loopFontSound(char *filename, boolean force=false) {
 }
 
 void playOKSound() {
- playSound(OKAY_SOUND_FILE_NAME);
+  playSound(OKAY_SOUND_FILE_NAME);
 }
 
 void playBootSound() {
- playSound(BOOT_SOUND_FILE_NAME);
+  playSound(BOOT_SOUND_FILE_NAME);
 }
 
 void playPoweringDownSound() {
- playSound(POWERING_DOWN_SOUND_FILE_NAME);
+  playSound(POWERING_DOWN_SOUND_FILE_NAME);
 }
 
 void playSoundFontIdleSound(boolean force=false) {
@@ -464,19 +466,25 @@ void playLockupSound() {
 }
 
 void playSoundFontPowerOnSound() {
- playFontSoundWithHum(POWER_ON_SOUND_FILE_NAME);
+  playFontSoundWithHum(POWER_ON_SOUND_FILE_NAME);
 }
 
 void playSoundFontPowerOffSound() {
- playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
+  playFontSound(POWER_OFF_SOUND_FILE_NAME, true);
 }
 
 void playSoundFontSwingSound() {
- playFontSoundWithHum(SWING_SOUND_FILE_NAME);
+  char sound[128];
+  
+  sprintf(sound, SWING_SOUND_FILE_FORMAT, currentSwingSound);
+  playFontSoundWithHum(sound);
 }
 
 void playSoundFontClashSound() {
- playFontSoundWithHum(CLASH_SOUND_FILE_NAME);
+  char sound[128];
+  
+  sprintf(sound, CLASH_SOUND_FILE_FORMAT, currentSwingSound);
+  playFontSoundWithHum(sound);
 }
 
 void playSoundFontNameSound() {

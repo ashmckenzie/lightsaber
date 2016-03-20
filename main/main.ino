@@ -13,7 +13,7 @@
 //#define DEBUG
 #define DEBUG_WIP
 
-//#define ENABLE_SLEEP
+#define ENABLE_SLEEP
 
 #define SD_SELECT_PIN       4
 #define BUTTON_MAIN_PIN     2
@@ -32,19 +32,17 @@
 #define MAX_SOUND_FONT_COUNT          10
 #define MAX_SOUND_FONT_FOLDER_LENGTH  24
 
-#define SOUND_FONTS_BASE "/fonts"
+#define OKAY_SOUND_FILE_NAME          "okay"
+#define BOOT_SOUND_FILE_NAME          "boot"
+#define LOCKUP_SOUND_FILE_NAME        "lockup"
+#define POWERING_DOWN_SOUND_FILE_NAME "powering_down"
 
-#define OKAY_SOUND_FILE_NAME          "/internal/okay.wav"
-#define BOOT_SOUND_FILE_NAME          "/internal/boot.wav"
-#define LOCKUP_SOUND_FILE_NAME        "/internal/lockup.wav"
-#define POWERING_DOWN_SOUND_FILE_NAME "/internal/powering_down.wav"
-
-#define NAME_SOUND_FILE_NAME      "name.wav"
-#define IDLE_SOUND_FILE_NAME      "idle.wav"
-#define POWER_ON_SOUND_FILE_NAME  "poweron.wav"
-#define POWER_OFF_SOUND_FILE_NAME "poweroff.wav"
-#define SWING_SOUND_FILE_FORMAT   "swing%d.wav"
-#define CLASH_SOUND_FILE_FORMAT   "clash%d.wav"
+#define NAME_SOUND_FILE_NAME      "name"
+#define IDLE_SOUND_FILE_NAME      "idle"
+#define POWER_ON_SOUND_FILE_NAME  "poweron"
+#define POWER_OFF_SOUND_FILE_NAME "poweroff"
+#define SWING_SOUND_FILE_FORMAT   "swing%d"
+#define CLASH_SOUND_FILE_FORMAT   "clash%d"
 
 OneButton buttonMain(BUTTON_MAIN_PIN, true);
 OneButton buttonAux(BUTTON_AUX_PIN, true);
@@ -254,9 +252,9 @@ void mainButtonLongPress() {
   if (saberOn) { 
     turnSaberOff();
   } else {
+#ifdef ENABLE_SLEEP
     playPoweringDownSound();
     delay(1000);
-#ifdef ENABLE_SLEEP
     goToSleep(true);
 #endif
   }
@@ -389,7 +387,7 @@ void getCurrentSoundFontDirectory(char *soundFontDirectory) {
   Serial.println(name);
 #endif 
   
-  sprintf(soundFontDirectory, "%s/%s", SOUND_FONTS_BASE, name);
+  sprintf(soundFontDirectory, "/fonts/%s", name);
 }
 
 void getFullSoundFontFilePath(char *filename, char *fullFilename) {
@@ -408,8 +406,13 @@ void getFullSoundFontFilePath(char *filename, char *fullFilename) {
   Serial.println(name);
 #endif 
   
-  sprintf(fullFilename, "%s/%s", soundFontDirectory, filename);
+  sprintf(fullFilename, "%s/%s.wav", soundFontDirectory, filename);
 }
+
+void getFullSoundInternalFilePath(char *filename, char *fullFilename) { 
+  sprintf(fullFilename, "/internal/%s.wav", filename);
+}
+
 
 void stopSound() {
   audio.loop(false);
@@ -458,6 +461,26 @@ void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
   playSound(fullFilename, force, loopIt);
 }
 
+void playInternalSound(char *filename, boolean force=false) {
+  char fullFilename[80];
+
+#ifdef DEBUG
+  Serial.print(F("playInternalSound(): filename: "));
+  Serial.print(filename);
+  Serial.print(F(", force: "));
+  Serial.println(force);
+#endif 
+
+  getFullSoundInternalFilePath(filename, fullFilename);
+
+#ifdef DEBUG
+  Serial.print(F("playInternalSound(): fullFilename: "));
+  Serial.println(fullFilename);
+#endif 
+  
+  playSound(fullFilename, force);
+}
+
 void loopSound(char *filename, boolean force=false) {
   playSound(filename, force, true);
 }
@@ -467,15 +490,15 @@ void loopFontSound(char *filename, boolean force=false) {
 }
 
 void playOKSound() {
-  playSound(OKAY_SOUND_FILE_NAME);
+  playInternalSound(OKAY_SOUND_FILE_NAME);
 }
 
 void playBootSound() {
-  playSound(BOOT_SOUND_FILE_NAME);
+  playInternalSound(BOOT_SOUND_FILE_NAME);
 }
 
 void playPoweringDownSound() {
-  playSound(POWERING_DOWN_SOUND_FILE_NAME);
+  playInternalSound(POWERING_DOWN_SOUND_FILE_NAME);
 }
 
 void playSoundFontIdleSound(boolean force=false) {
@@ -551,13 +574,13 @@ void playSoundFontSwingSound() {
   char filename[80] = "";
 
   if (nextSoundFile(SWING_SOUND_FILE_FORMAT, &currentSwingSound, filename)) {
-#ifdef DEBUG_WIP
+#ifdef DEBUG
     Serial.print(F("playSoundFontSwingSound(): filename: "));
     Serial.println(filename);
       playFontSoundWithHum(filename);
 #endif
   } else {
-#ifdef DEBUG_WIP
+#ifdef DEBUG
     Serial.println(F("playSoundFontSwingSound(): NO filename found :("));
     playSoundFontIdleSound(true);
 #endif
@@ -568,13 +591,13 @@ void playSoundFontClashSound() {
   char filename[80] = "";
 
   if (nextSoundFile(CLASH_SOUND_FILE_FORMAT, &currentClashSound, filename)) {
-#ifdef DEBUG_WIP
+#ifdef DEBUG
     Serial.print(F("playSoundFontClashSound(): filename: "));
     Serial.println(filename);
       playFontSoundWithHum(filename);
 #endif
   } else {
-#ifdef DEBUG_WIP
+#ifdef DEBUG
     Serial.println(F("playSoundFontClashSound(): NO filename found :("));
     playSoundFontIdleSound(true);
 #endif
@@ -809,7 +832,7 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
   char buffer[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
   waitForSoundToFinish();
-  root.open(SOUND_FONTS_BASE);
+  root.open("/fonts");
 
   while (file.openNext(&root, O_READ)) {
     file.getName(buffer, MAX_SOUND_FONT_FOLDER_LENGTH);

@@ -36,6 +36,7 @@
 #define OKAY_SOUND_FILE_NAME   "/internal/okay.wav"
 #define BOOT_SOUND_FILE_NAME   "/internal/boot.wav"
 #define LOCKUP_SOUND_FILE_NAME "/internal/lockup.wav"
+#define POWERING_DOWN_SOUND_FILE_NAME "/internal/powering_down.wav"
 
 #define NAME_SOUND_FILE_NAME      "name.wav"
 #define IDLE_SOUND_FILE_NAME      "idle.wav"
@@ -250,7 +251,9 @@ void mainButtonLongPress() {
   if (saberOn) { 
     turnSaberOff();
   } else {
-    goToSleep();
+    playPoweringDownSound();
+    delay(1200);
+    goToSleep(true);
   }
 }
 
@@ -283,6 +286,7 @@ void auxButtonLongPress() {
 
 void turnOnButtonMainLED() {
   stopOscillateButtonMainLED();
+  delay(100);
   digitalWrite(BUTTON_MAIN_LED_PIN, HIGH);
 }
 
@@ -294,6 +298,7 @@ void flashButtonMainLED(byte wait=50) {
 
 void turnOffButtonMainLED() {
   stopOscillateButtonMainLED();
+  delay(100);
   digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
 }
 
@@ -436,6 +441,10 @@ void playOKSound() {
 
 void playBootSound() {
  playSound(BOOT_SOUND_FILE_NAME);
+}
+
+void playPoweringDownSound() {
+ playSound(POWERING_DOWN_SOUND_FILE_NAME);
 }
 
 void playSoundFontIdleSound(boolean force=false) {
@@ -819,21 +828,14 @@ void checkIfShouldSleep() {
   Serial.print(secondsIdle);
   Serial.print(F(" < "));
   Serial.println(MAX_SECONDS_BEFORE_SLEEP);  
-
 #endif    
     secondsIdle++;
-    return;
+  } else {
+    goToSleep(false);
   }
-
-  goToSleep();
-
-  startIdleMonitor();
-
-  startOscillateButtonMainLED();
-  startOscillateButtonAuxLED();
 }
 
-void goToSleep() {
+void goToSleep(boolean force) {
   long counter = 0;
 
 #ifdef DEBUG
@@ -841,46 +843,47 @@ void goToSleep() {
 #endif
   delay(100);
 
+  secondsIdle = 0;
+  sleeping = true;
+
   turnOffButtonMainLED();
   turnOffButtonAuxLED();
 
-  sleeping = true;
-  secondsIdle = 0;
-
   stopIdleMonitor(); 
 
-  while (sleeping) {
+  while (sleeping) {  
     counter = counter + 8;
     attachInterrupt(0, wakeUpNow, LOW);
 
-#ifdef DEBUG_WIP
-  Serial.print(F("goToSleep(): counter: "));
-  Serial.println(counter);
-  delay(100);
-#endif        
-    
-    if (counter < MAX_SECONDS_BEFORE_DEEP_SLEEP) {
-#ifdef DEBUG_WIP
-  Serial.print(F("goToSleep(): Sleeping for 8 secs, counter: "));
-  Serial.println(counter);
-  delay(100);
-#endif        
-      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
-    } else {
-#ifdef DEBUG_WIP
+    if (force || counter >= MAX_SECONDS_BEFORE_DEEP_SLEEP) {
+#ifdef DEBUG_MORE
   Serial.println(F("goToSleep(): Sleeping FOREVER."));
   delay(100);
 #endif              
-      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);    
+      LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);   
+    } else {
+#ifdef DEBUG_MORE
+  Serial.print(F("goToSleep(): Sleeping for 8 secs, counter: "));
+  Serial.print(counter);
+  Serial.print(F(" < "));
+  Serial.println(MAX_SECONDS_BEFORE_DEEP_SLEEP);
+  delay(100);
+#endif        
+      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
     }
     
-#ifdef DEBUG_WIP
+#ifdef DEBUG_MORE
     Serial.println(F("goToSleep(): flashButtonMainLED()"));
     delay(100);
 #endif    
     flashButtonMainLED();
     detachInterrupt(0);
   }
+
+  startIdleMonitor();
+
+  startOscillateButtonMainLED();
+  startOscillateButtonAuxLED();
 }
 
 /* -------------------------------------------------------------------------------------------------- */

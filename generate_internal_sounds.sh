@@ -30,6 +30,7 @@ create_internal 'okay' okay
 create_internal 'cancelled' cancelled
 create_internal 'configuration menu' configuration_menu
 create_internal 'configuration saved' configuration_saved
+create_internal 'powering down' powering_down
 
 create 'black star' 'fonts/black_star'  name
 create 'classic' 'fonts/classic'  name

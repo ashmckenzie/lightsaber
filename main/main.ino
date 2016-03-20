@@ -247,7 +247,11 @@ void mainButtonLongPress() {
 #endif
   if (amBackFromSleep()) { return; }
   
-  if (saberOn) { turnSaberOff(); }
+  if (saberOn) { 
+    turnSaberOff();
+  } else {
+    goToSleep();
+  }
 }
 
 void auxButtonPress() {
@@ -708,7 +712,6 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
   root.close();
 }
 
-
 /* -------------------------------------------------------------------------------------------------- */
 
 unsigned int soundVolume() {
@@ -810,8 +813,6 @@ void wakeUpNow() {
 }
 
 void checkIfShouldSleep() {
-  long counter = 0;
-  
   if (secondsIdle < MAX_SECONDS_BEFORE_SLEEP) {
 #ifdef DEBUG_MORE
   Serial.print(F("checkIfShouldSleep(): Not sleeping, "));
@@ -823,9 +824,20 @@ void checkIfShouldSleep() {
     secondsIdle++;
     return;
   }
-  
+
+  goToSleep();
+
+  startIdleMonitor();
+
+  startOscillateButtonMainLED();
+  startOscillateButtonAuxLED();
+}
+
+void goToSleep() {
+  long counter = 0;
+
 #ifdef DEBUG
-  Serial.println(F("checkIfShouldSleep(): Sleeping.."));
+  Serial.println(F("goToSleep(): HERE"));
 #endif
   delay(100);
 
@@ -841,40 +853,37 @@ void checkIfShouldSleep() {
     counter = counter + 8;
     attachInterrupt(0, wakeUpNow, LOW);
 
-#ifdef DEBUG_MORE
-  Serial.print(F("checkIfShouldSleep(): counter: "));
+#ifdef DEBUG_WIP
+  Serial.print(F("goToSleep(): counter: "));
   Serial.println(counter);
   delay(100);
 #endif        
     
     if (counter < MAX_SECONDS_BEFORE_DEEP_SLEEP) {
-#ifdef DEBUG_MORE
-  Serial.print(F("checkIfShouldSleep(): Sleeping for 8 secs.."));
+#ifdef DEBUG_WIP
+  Serial.print(F("goToSleep(): Sleeping for 8 secs, counter: "));
   Serial.println(counter);
   delay(100);
 #endif        
       LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
     } else {
-#ifdef DEBUG_MORE
-  Serial.println(F("checkIfShouldSleep(): Sleeping FOREVER."));
+#ifdef DEBUG_WIP
+  Serial.println(F("goToSleep(): Sleeping FOREVER."));
   delay(100);
 #endif              
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);    
     }
     
-#ifdef DEBUG_MORE
-    Serial.println(F("checkIfShouldSleep(): flashButtonMainLED()"));
+#ifdef DEBUG_WIP
+    Serial.println(F("goToSleep(): flashButtonMainLED()"));
     delay(100);
 #endif    
     flashButtonMainLED();
     detachInterrupt(0);
   }
-
-  startIdleMonitor();
-
-  startOscillateButtonMainLED();
-  startOscillateButtonAuxLED();
 }
+
+/* -------------------------------------------------------------------------------------------------- */
 
 void setup() {
   setupSerial();

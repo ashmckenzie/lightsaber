@@ -413,16 +413,15 @@ void getFullSoundInternalFilePath(char *filename, char *fullFilename) {
   sprintf(fullFilename, "/internal/%s.wav", filename);
 }
 
-
-void stopSound() {
-  audio.loop(false);
+void stopSound(boolean stopLooping=false) {
   audio.stopPlayback();
+  if (stopLooping) { audio.loop(false); }
 }
 
 void playSound(char *filename, boolean force=false, boolean loopIt=false) {
   char str[100];
 
-#ifdef DEBUG || DEBUG
+#ifdef DEBUG
   sprintf(str, "playSound(): %s (force: %d, loop: %d)", filename, force, loopIt);
   Serial.println(str);
 #endif
@@ -442,7 +441,7 @@ void playSound(char *filename, boolean force=false, boolean loopIt=false) {
 void playFontSound(char *filename, boolean force=false, boolean loopIt=false) {
   char fullFilename[80];
 
-#ifdef DEBUG
+#ifdef DEBUG_WIP
   Serial.print(F("playFontSound(): filename: "));
   Serial.print(filename);
   Serial.print(F(", force: "));
@@ -502,7 +501,7 @@ void playPoweringDownSound() {
 }
 
 void playSoundFontIdleSound(boolean force=false) {
-  loopFontSound("idle.wav", force);
+  loopFontSound(IDLE_SOUND_FILE_NAME, force);
 }
 
 void playLockupSound() {
@@ -526,8 +525,8 @@ void playSoundFontPowerOffSound() {
 }
 
 boolean fileExistsOnSDCard(char *file) {
-  stopSound();
-  delay(100);
+  stopSound(true);
+//  delay(100);
   return sd.exists(file);  
 }
 
@@ -574,10 +573,10 @@ void playSoundFontSwingSound() {
   char filename[80] = "";
 
   if (nextSoundFile(SWING_SOUND_FILE_FORMAT, &currentSwingSound, filename)) {
-#ifdef DEBUG
+#ifdef DEBUG_WIP
     Serial.print(F("playSoundFontSwingSound(): filename: "));
     Serial.println(filename);
-      playFontSoundWithHum(filename);
+    playFontSoundWithHum(filename);
 #endif
   } else {
 #ifdef DEBUG
@@ -591,10 +590,10 @@ void playSoundFontClashSound() {
   char filename[80] = "";
 
   if (nextSoundFile(CLASH_SOUND_FILE_FORMAT, &currentClashSound, filename)) {
-#ifdef DEBUG
+#ifdef DEBUG_WIP
     Serial.print(F("playSoundFontClashSound(): filename: "));
     Serial.println(filename);
-      playFontSoundWithHum(filename);
+    playFontSoundWithHum(filename);
 #endif
   } else {
 #ifdef DEBUG
@@ -617,7 +616,7 @@ void playFontSoundWithHum(char *filename) {
 
 void turnSaberOn() {
   if (!saberOn) {
-#ifdef DEBUG || DEBUG
+#ifdef DEBUG
   Serial.println(F("turnSaberOn(): Turning saber ON!"));
 #endif
     stopIdleMonitor();
@@ -632,7 +631,7 @@ void turnSaberOn() {
 
 void turnSaberOff() {
   if (saberOn) {
-#ifdef DEBUG || DEBUG
+#ifdef DEBUG
   Serial.println(F("turnSaberOff(): Turning saber OFF!"));
 #endif        
     playSoundFontPowerOffSound();
@@ -805,7 +804,7 @@ void getCurrentSoundFontName(char *name) {
 void getStoredSoundFontName(char *name) {
   char str[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-  EEPROM.writeBlock<char>(addressCharArray, "black_star", MAX_SOUND_FONT_FOLDER_LENGTH);
+  EEPROM.writeBlock<char>(addressCharArray, "classic", MAX_SOUND_FONT_FOLDER_LENGTH);
   EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
 
 #ifdef DEBUG
@@ -850,7 +849,7 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
 /* -------------------------------------------------------------------------------------------------- */
 
 unsigned int soundVolume() {
-  int currentVolume = 1;
+  int currentVolume = 4;
 
   return currentVolume;
 }

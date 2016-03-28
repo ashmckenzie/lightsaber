@@ -2,7 +2,7 @@
 
 SPEED="40"
 VOICE="Samantha"
-OUTPUT_BASE="/Volumes/LS"
+OUTPUT_BASE="/Volumes/8GB"
 
 create() {
   tmp="./tmp/${3}.aiff"
@@ -37,3 +37,5 @@ create 'classic' 'fonts/classic' name
 create 'old republic jedi' 'fonts/old_republic_jedi' name
 create 'star killer' 'fonts/star_killer' name
 create 'unstable' 'fonts/unstable' name
+create 'dark meat' 'fonts/dark_meat' name
+create 'light meat' 'fonts/light_meat' name

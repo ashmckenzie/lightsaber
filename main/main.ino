@@ -6,12 +6,12 @@
 #include <EEPROMex.h>
 #include <Timer.h>
 #include <LowPower.h>
-#include <MPU6050_6Axis_MotionApps20.h>
+//#include <MPU6050_6Axis_MotionApps20.h>
 
 /* -------------------------------------------------------------------------------------------------- */
 
 //#define DEBUG
-#define DEBUG_WIP
+//#define DEBUG_WIP
 
 #define ENABLE_SLEEP
 
@@ -37,7 +37,7 @@ OneButton buttonAux(BUTTON_AUX_PIN, true);
 TMRpcm audio;
 SdFat sd;
 Timer t;
-MPU6050 mpu;
+//MPU6050 mpu;
 
 /* -------------------------------------------------------------------------------------------------- */
 
@@ -83,35 +83,35 @@ void setupLED() {
   digitalWrite(LED_PIN, LOW);
 }
 
-void setupAccelerometer() {
-  Wire.begin();
-  mpu.initialize();
-
-  if (!mpu.testConnection()) {
-    Serial.println(F("setupAccelerometer(): MPU6050 failed"));
-    return;
-  }
-
-  mpu.dmpInitialize();
-
-  mpu.setXAccelOffset(-762);
-  mpu.setYAccelOffset(583);
-  mpu.setZAccelOffset(1254);
-
-  mpu.setXGyroOffset(84);
-  mpu.setYGyroOffset(-47);
-  mpu.setZGyroOffset(87);
-
-  mpu.setDMPEnabled(true);
-
-//  attachInterrupt(0, dmpDataReady, RISING);
-  mpu.getIntStatus();
-//  packetSize = mpu.dmpGetFIFOPacketSize();
-
-#ifdef DEBUG
-  Serial.println(F("setupAccelerometer(): MPU6050 ready!"));
-#endif
-}
+//void setupAccelerometer() {
+//  Wire.begin();
+//  mpu.initialize();
+//
+//  if (!mpu.testConnection()) {
+//    Serial.println(F("setupAccelerometer(): MPU6050 failed"));
+//    return;
+//  }
+//
+//  mpu.dmpInitialize();
+//
+//  mpu.setXAccelOffset(-762);
+//  mpu.setYAccelOffset(583);
+//  mpu.setZAccelOffset(1254);
+//
+//  mpu.setXGyroOffset(84);
+//  mpu.setYGyroOffset(-47);
+//  mpu.setZGyroOffset(87);
+//
+//  mpu.setDMPEnabled(true);
+//
+////  attachInterrupt(0, dmpDataReady, RISING);
+//  mpu.getIntStatus();
+////  packetSize = mpu.dmpGetFIFOPacketSize();
+//
+//#ifdef DEBUG
+//  Serial.println(F("setupAccelerometer(): MPU6050 ready!"));
+//#endif
+//}
 
 void setupSwitches() {
   pinMode(BUTTON_MAIN_LED_PIN, OUTPUT);
@@ -770,7 +770,6 @@ void getCurrentSoundFontName(char *name) {
 void getStoredSoundFontName(char *name) {
   char str[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-  EEPROM.writeBlock<char>(addressCharArray, "classic", MAX_SOUND_FONT_FOLDER_LENGTH);
   EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
 
 #ifdef DEBUG
@@ -821,7 +820,7 @@ void getAvailableSoundFontNames(char soundFonts[][MAX_SOUND_FONT_FOLDER_LENGTH])
 /* -------------------------------------------------------------------------------------------------- */
 
 unsigned int soundVolume() {
-  int currentVolume = 1;
+  int currentVolume = 4;
 
   return currentVolume;
 }
@@ -917,7 +916,7 @@ void setup() {
   setupSwitches();
   setupSDCard();
   setupConfigFile();
-  setupAccelerometer();
+//  setupAccelerometer();
   setupAudio();
 
   playSoundFontNameSound();

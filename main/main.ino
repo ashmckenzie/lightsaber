@@ -1,4 +1,5 @@
 #include <avr/sleep.h>
+#include <math.h>
 
 #include <SdFat.h>
 #include <TMRpcm.h>
@@ -11,20 +12,20 @@
 /* -------------------------------------------------------------------------------------------------- */
 
 //#define DEBUG
-//#define DEBUG_WIP
+#define DEBUG_WIP
 
 #define ENABLE_SLEEP
 
 #define SD_SELECT_PIN       4
 #define BUTTON_MAIN_PIN     2
-#define BUTTON_MAIN_LED_PIN 7
+#define BUTTON_MAIN_LED_PIN 3  // PWM
 #define BUTTON_AUX_PIN      6
-#define BUTTON_AUX_LED_PIN  8
+#define BUTTON_AUX_LED_PIN  5  // PWM
 #define SPEAKER_PIN         9
 #define LED_PIN            13
 
-#define MAX_SECONDS_BEFORE_SLEEP      60   // 1 minute
-#define MAX_SECONDS_BEFORE_DEEP_SLEEP 300  // 5 minutes
+#define MAX_SECONDS_BEFORE_SLEEP      30
+#define MAX_SECONDS_BEFORE_DEEP_SLEEP 180  // 3 minutes
 
 #define MAX_SOUND_FONT_COUNT          10
 #define MAX_SOUND_FONT_FOLDER_LENGTH  24
@@ -248,6 +249,20 @@ void flashButtonMainLED(byte wait=50) {
   digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
 }
 
+void breathMainLED() { 
+  for (int i = 0 ; sleeping && i <= 255 ; i += 4) {
+    analogWrite(BUTTON_MAIN_LED_PIN, i);
+    delay(20);
+  }
+
+  for (int i = 255 ; sleeping && i >= 0 ; i -= 2) {
+    analogWrite(BUTTON_MAIN_LED_PIN, i);
+    delay(8);
+  }
+
+  digitalWrite(BUTTON_MAIN_LED_PIN, LOW);
+}
+
 void turnOffButtonMainLED() {
   stopOscillateButtonMainLED();
   delay(100);
@@ -272,7 +287,7 @@ void stopIdleMonitor() {
   }
 }
 
-void startOscillateButtonMainLED(unsigned int speed=750) {
+void startOscillateButtonMainLED(unsigned int speed=500) {
   stopOscillateButtonMainLED();
   delay(10);
   buttonMainLEDEvent = t.oscillate(BUTTON_MAIN_LED_PIN, speed, HIGH);  
@@ -299,7 +314,7 @@ void turnOffButtonAuxLED() {
   digitalWrite(BUTTON_AUX_LED_PIN, LOW);
 }
 
-void startOscillateButtonAuxLED(unsigned int speed=750) {
+void startOscillateButtonAuxLED(unsigned int speed=500) {
   stopOscillateButtonAuxLED();
   delay(10);
   buttonAuxLEDEvent = t.oscillate(BUTTON_AUX_LED_PIN, speed, HIGH);  
@@ -314,6 +329,12 @@ void stopOscillateButtonAuxLED() {
     t.stop(buttonAuxLEDEvent);
     buttonAuxLEDEvent = 0;
   }
+}
+
+void startOscillateButtonLEDs() {
+  startOscillateButtonMainLED();
+  delay(250);
+  startOscillateButtonAuxLED();
 }
 
 /* -------------------------------------------------------------------------------------------------- */
@@ -568,6 +589,7 @@ void turnSaberOn() {
     turnOnButtonAuxLED();
     
     playSoundFontPowerOnSound();
+    
     saberOn = true;
   }
 }
@@ -577,15 +599,18 @@ void turnSaberOff() {
 #ifdef DEBUG
   Serial.println(F("turnSaberOff(): Turning saber OFF!"));
 #endif        
+    startOscillateButtonMainLED(50);
+    startOscillateButtonAuxLED(50);
+//    delay(2000);
+
     playSoundFontPowerOffSound();
-
     waitForSoundToFinish();
-
-    startOscillateButtonMainLED();
-    startOscillateButtonAuxLED();
     
     startIdleMonitor();
-    
+
+    delay(3000);
+    startOscillateButtonLEDs();
+
     saberOn = false;
   }
 }
@@ -770,7 +795,9 @@ void getCurrentSoundFontName(char *name) {
 void getStoredSoundFontName(char *name) {
   char str[MAX_SOUND_FONT_FOLDER_LENGTH] = "";
 
-  EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
+//  EEPROM.readBlock<char>(addressCharArray, str, MAX_SOUND_FONT_FOLDER_LENGTH);
+
+  sprintf(str, "light_meat");
 
 #ifdef DEBUG
   Serial.print(F("getStoredSoundFontName(): str: "));
@@ -865,7 +892,7 @@ void goToSleep(boolean force) {
   turnOffButtonMainLED();
   turnOffButtonAuxLED();
 
-  stopIdleMonitor(); 
+  stopIdleMonitor();
 
   while (sleeping) {  
     counter = counter + 8;
@@ -879,27 +906,23 @@ void goToSleep(boolean force) {
       LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);   
     } else {
 #ifdef DEBUG
-  Serial.print(F("goToSleep(): Sleeping for 8 secs, counter: "));
+  Serial.print(F("goToSleep(): Sleeping for 2 secs, counter: "));
   Serial.print(counter);
   Serial.print(F(" < "));
   Serial.println(MAX_SECONDS_BEFORE_DEEP_SLEEP);
   delay(100);
 #endif        
-      LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF); 
+      LowPower.powerDown(SLEEP_2S, ADC_OFF, BOD_OFF); 
     }
     
-#ifdef DEBUG
-    Serial.println(F("goToSleep(): flashButtonMainLED()"));
-    delay(100);
-#endif    
-    flashButtonMainLED();
+//    flashButtonMainLED();
+    breathMainLED();
+    
     detachInterrupt(0);
   }
 
   startIdleMonitor();
-
-  startOscillateButtonMainLED();
-  startOscillateButtonAuxLED();
+  startOscillateButtonLEDs();
 }
 #endif
 
@@ -923,10 +946,8 @@ void setup() {
 
   t.every(10, processButtonPresses);
   
-  startIdleMonitor();
-  
-  startOscillateButtonMainLED();
-  startOscillateButtonAuxLED(); 
+  startIdleMonitor();  
+  startOscillateButtonLEDs();
 
 #ifdef DEBUG
   Serial.println(F("setup(): Ready!"));
